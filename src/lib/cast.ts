@@ -2,7 +2,7 @@
  * Google Cast integration for casting slideshows to compatible devices
  */
 
-const CAST_APP_ID = chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID;
+const CAST_APP_ID = (chrome as any).cast?.media?.DEFAULT_MEDIA_RECEIVER_APP_ID || 'CC1AD845';
 
 export interface CastState {
   isAvailable: boolean;

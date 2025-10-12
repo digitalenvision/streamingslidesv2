@@ -29,8 +29,9 @@ function MediaThumbnail({ url }: { url: string }) {
 }
 
 function PreviewModal({ item, onClose }: { item: StreamItem; onClose: () => void }) {
-  const { cachedUrl } = useCachedImage(item.content.url);
-  const displayUrl = cachedUrl || item.content.url;
+  const itemContent = item.content as any;
+  const { cachedUrl } = useCachedImage(itemContent.url);
+  const displayUrl = cachedUrl || itemContent.url;
   
   return (
     <Modal
@@ -40,7 +41,7 @@ function PreviewModal({ item, onClose }: { item: StreamItem; onClose: () => void
       title="Preview"
     >
       <div className="flex items-center justify-center">
-        {isVideo(item.content.url) ? (
+        {isVideo(itemContent.url) ? (
           <video
             src={displayUrl}
             controls
@@ -83,7 +84,6 @@ export function PhotoList({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const allSelected = items.length > 0 && selectedItems.length === items.length;
-  const someSelected = selectedItems.length > 0 && !allSelected;
 
   return (
     <>
@@ -145,12 +145,12 @@ export function PhotoList({
                 className="w-full h-full cursor-pointer"
                 onClick={() => setPreviewItem(item)}
               >
-                {isVideo(item.content.url) ? (
+                {isVideo((item.content as any).url) ? (
                   <div className="w-full h-full flex items-center justify-center">
                     <VideoIcon className="w-12 h-12 text-muted-foreground" />
                   </div>
                 ) : (
-                  <MediaThumbnail url={item.content.thumbnail_url || item.content.url} />
+                  <MediaThumbnail url={(item.content as any).thumbnail_url || (item.content as any).url} />
                 )}
               </div>
 

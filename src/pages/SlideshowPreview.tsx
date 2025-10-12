@@ -10,7 +10,7 @@ import { subscribeToCommands } from '@/services/command';
 import { broadcastStatus, sendHeartbeat } from '@/services/status';
 import { getTransitionVariants, shuffleArray } from '@/lib/utils';
 import { imageCache } from '@/lib/imageCache';
-import type { Slideshow, StreamWithItems, StreamItem, PreviewState, Stream } from '@/types';
+import type { Slideshow, StreamWithItems, StreamItem, Stream } from '@/types';
 
 // Enhanced item with stream reference for settings
 interface EnhancedStreamItem extends StreamItem {
@@ -21,7 +21,7 @@ interface EnhancedStreamItem extends StreamItem {
 export function SlideshowPreview() {
   const { id } = useParams<{ id: string }>();
   const [slideshow, setSlideshow] = useState<Slideshow | null>(null);
-  const [streams, setStreams] = useState<StreamWithItems[]>([]);
+  const [, setStreams] = useState<StreamWithItems[]>([]);
   const [allItems, setAllItems] = useState<EnhancedStreamItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -317,7 +317,7 @@ export function SlideshowPreview() {
     return result;
   };
 
-  const handleCommand = (command: string, payload?: any) => {
+  const handleCommand = (command: string, _payload?: any) => {
     switch (command) {
       case 'next':
         handleNext();
@@ -523,8 +523,8 @@ export function SlideshowPreview() {
                     console.log('SlideshowPreview: Video started playing');
                   }}
                   onEnded={handleVideoEnded}
-                  onError={(e) => {
-                    console.error('Video playback error:', e);
+                  onError={(_e) => {
+                    console.error('Video playback error');
                     handleNext();
                   }}
                 />
@@ -537,7 +537,7 @@ export function SlideshowPreview() {
                     const img = e.currentTarget;
                     console.log(`SlideshowPreview: Image loaded - Natural: ${img.naturalWidth}x${img.naturalHeight}, Displayed: ${img.width}x${img.height}`);
                   }}
-                  onError={(e) => {
+                  onError={(_e) => {
                     console.error('SlideshowPreview: Image failed to load');
                     handleNext();
                   }}

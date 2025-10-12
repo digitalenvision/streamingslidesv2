@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardFooter } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { Play, Edit, Share2, Trash2, MoreVertical } from 'lucide-react';
+import { Play, Edit, Share2, Trash2 } from 'lucide-react';
 import { formatDuration, generateShareUrl, copyToClipboard } from '@/lib/utils';
 import type { SlideshowWithStats } from '@/types';
 import { Alert } from '@/components/ui/Alert';

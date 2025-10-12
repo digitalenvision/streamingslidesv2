@@ -47,9 +47,9 @@ export function StreamCard({ stream, slideshowId, onDelete, dragHandleProps }: S
 
             {/* Thumbnail */}
             <div className="w-20 h-20 bg-muted rounded flex-shrink-0">
-              {stream.items.length > 0 && stream.items[0].content.url ? (
+              {stream.items.length > 0 && (stream.items[0].content as any).url ? (
                 <img
-                  src={stream.items[0].content.thumbnail_url || stream.items[0].content.url}
+                  src={(stream.items[0].content as any).thumbnail_url || (stream.items[0].content as any).url}
                   alt={stream.title}
                   className="w-full h-full object-cover rounded"
                 />

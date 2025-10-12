@@ -69,7 +69,7 @@ export function SlideshowBuilder() {
     await loadData();
   };
 
-  const handleDragEnd = async (result: any) => {
+  /* const handleDragEnd = async (result: any) => {
     if (!result.destination || !id) return;
 
     const items = Array.from(streams);
@@ -87,7 +87,7 @@ export function SlideshowBuilder() {
       setError(err.message || 'Failed to reorder streams');
       await loadData();
     }
-  };
+  }; */
 
   if (loading) {
     return (

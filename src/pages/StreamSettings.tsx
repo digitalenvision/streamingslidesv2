@@ -10,7 +10,7 @@ import { Alert } from '@/components/ui/Alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { ArrowLeft } from 'lucide-react';
 import { getStream, updateStreamSettings } from '@/services/stream';
-import type { StreamWithItems, StreamSettings } from '@/types';
+import type { StreamWithItems, StreamSettings, TransitionType, TransitionSpeed } from '@/types';
 
 export function StreamSettings() {
   const { id: slideshowId, streamId } = useParams<{ id: string; streamId: string }>();
@@ -196,7 +196,7 @@ export function StreamSettings() {
                 id="transition"
                 value={settings.transition || 'fade'}
                 onChange={(e) =>
-                  setSettings({ ...settings, transition: e.target.value as any })
+                  setSettings({ ...settings, transition: e.target.value as TransitionType })
                 }
               >
                 <option value="none">None</option>
@@ -218,7 +218,7 @@ export function StreamSettings() {
                 id="transition-speed"
                 value={settings.transitionSpeed || 'medium'}
                 onChange={(e) =>
-                  setSettings({ ...settings, transitionSpeed: e.target.value as any })
+                  setSettings({ ...settings, transitionSpeed: e.target.value as TransitionSpeed })
                 }
               >
                 <option value="slow">Slow</option>

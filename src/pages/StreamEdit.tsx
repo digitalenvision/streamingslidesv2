@@ -10,7 +10,7 @@ import { PhotoList } from '@/components/stream/PhotoList';
 import { CreateAlbumModal } from '@/components/stream/CreateAlbumModal';
 import { ArrowLeft, FolderPlus, Settings } from 'lucide-react';
 import { getStream } from '@/services/stream';
-import { getStreamItems, deleteStreamItem, deleteMultipleStreamItems, reorderStreamItems } from '@/services/photo';
+import { getStreamItems, deleteStreamItem, deleteMultipleStreamItems } from '@/services/photo';
 import { createAlbumFromPhotos } from '@/services/album';
 import type { StreamWithItems, StreamItem } from '@/types';
 

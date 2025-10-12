@@ -336,8 +336,8 @@ class ImageCacheManager {
       const imageStore = transaction.objectStore(STORE_NAME);
       const metadataStore = transaction.objectStore(METADATA_STORE);
 
-      const clearImages = imageStore.clear();
-      const clearMetadata = metadataStore.clear();
+      imageStore.clear();
+      metadataStore.clear();
 
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
