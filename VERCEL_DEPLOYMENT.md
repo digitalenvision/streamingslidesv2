@@ -134,6 +134,29 @@ Access these in your Vercel project dashboard.
 
 ---
 
+## ✅ SPA Routing Fix
+
+The project includes a `vercel.json` file that fixes the common 404 error on page refresh. This ensures all routes are handled by React Router, not Vercel's file system.
+
+```json
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+```
+
+This means:
+- ✅ Page refreshes work on any route
+- ✅ Direct URL access works
+- ✅ Browser back/forward buttons work
+- ✅ Shared links work correctly
+
+---
+
 ## 🐛 Troubleshooting
 
 ### Build Fails?
