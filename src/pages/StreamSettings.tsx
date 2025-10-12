@@ -73,8 +73,8 @@ export function StreamSettings() {
       
       const mergedSettings: StreamSettings = {
         duration: Number(getValue(data.settings?.duration, defaultSettings.duration)),
-        transition: String(getValue(data.settings?.transition, defaultSettings.transition)),
-        transitionSpeed: String(getValue(data.settings?.transitionSpeed, defaultSettings.transitionSpeed)),
+        transition: String(getValue(data.settings?.transition, defaultSettings.transition)) as TransitionType,
+        transitionSpeed: String(getValue(data.settings?.transitionSpeed, defaultSettings.transitionSpeed)) as TransitionSpeed,
         frequency: Number(getValue(data.settings?.frequency, defaultSettings.frequency)),
       };
       

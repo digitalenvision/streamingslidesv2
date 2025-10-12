@@ -10,7 +10,7 @@ import { CreateStreamModal } from '@/components/builder/CreateStreamModal';
 import { GlobalSettingsModal } from '@/components/builder/GlobalSettingsModal';
 import { Plus, Settings, Radio, Play, ArrowLeft } from 'lucide-react';
 import { getSlideshow } from '@/services/slideshow';
-import { getStreams, createStream, deleteStream, reorderStreams, applyGlobalSettings } from '@/services/stream';
+import { getStreams, createStream, deleteStream, applyGlobalSettings } from '@/services/stream';
 import type { Slideshow, StreamWithItems } from '@/types';
 
 export function SlideshowBuilder() {

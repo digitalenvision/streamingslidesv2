@@ -186,7 +186,7 @@ export function SlideshowPreview() {
       // Preload and cache images (non-blocking, continues even if some fail)
       if (items.length > 0) {
         setPreloading(true);
-        const urls = items.map(item => item.content.url);
+        const urls = items.map(item => (item.content as any).url);
         
         try {
           // Cache all images with progress tracking
@@ -447,13 +447,14 @@ export function SlideshowPreview() {
   const margin = slideshow.settings.margin || 0;
   
   // Get cached URL or fallback to original
-  const currentUrl = cachedUrls.get(currentItem.content.url) || currentItem.content.url;
+  const currentItemContent = currentItem.content as any;
+  const currentUrl = cachedUrls.get(currentItemContent.url) || currentItemContent.url;
   
   console.log('SlideshowPreview: Margin/spacing applied:', margin + '%');
   console.log('SlideshowPreview: Rendering item:', { 
     index: currentIndex, 
     type: currentItem.type, 
-    url: currentItem.content.url,
+    url: currentItemContent.url,
     displayUrl: currentUrl,
     isBlackScreen 
   });
