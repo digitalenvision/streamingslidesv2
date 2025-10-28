@@ -49,19 +49,34 @@ export function SlideshowPreview() {
   useEffect(() => {
     if (!id) return;
 
+    console.log('SlideshowPreview: Setting up command subscription');
     const unsubscribe = subscribeToCommands(id, handleCommand);
-    return () => unsubscribe();
-  }, [id]);
+    
+    return () => {
+      console.log('SlideshowPreview: Cleaning up command subscription');
+      unsubscribe();
+    };
+  }, [id, handleCommand]);
 
   // Send heartbeat
   useEffect(() => {
     if (!id) return;
 
+    console.log('SlideshowPreview: Starting heartbeat');
+    
+    // Send initial heartbeat immediately
+    sendHeartbeat(id).catch(err => {
+      console.error('Failed to send initial heartbeat:', err);
+    });
+
     heartbeatIntervalRef.current = setInterval(() => {
-      sendHeartbeat(id);
+      sendHeartbeat(id).catch(err => {
+        console.error('Failed to send heartbeat:', err);
+      });
     }, 5000);
 
     return () => {
+      console.log('SlideshowPreview: Stopping heartbeat');
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
       }
@@ -72,12 +87,15 @@ export function SlideshowPreview() {
   useEffect(() => {
     if (!id) return;
 
+    console.log('SlideshowPreview: Broadcasting status update');
     broadcastStatus(id, {
       slideshow_id: id,
       is_playing: isPlaying,
       is_black_screen: isBlackScreen,
       current_stream_index: 0,
       current_item_index: currentIndex,
+    }).catch(err => {
+      console.error('Failed to broadcast status:', err);
     });
   }, [id, isPlaying, isBlackScreen, currentIndex]);
 
@@ -317,13 +335,28 @@ export function SlideshowPreview() {
     return result;
   };
 
-  const handleCommand = (command: string, _payload?: any) => {
+  const handleCommand = useCallback((command: string, _payload?: any) => {
+    console.log('SlideshowPreview: Handling command:', command);
     switch (command) {
       case 'next':
-        handleNext();
+        setCurrentIndex(prev => {
+          const nextIndex = prev + 1;
+          if (nextIndex >= allItems.length) {
+            if (slideshow?.settings?.loop) {
+              return 0;
+            } else {
+              setIsPlaying(false);
+              return prev;
+            }
+          }
+          return nextIndex;
+        });
         break;
       case 'previous':
-        handlePrevious();
+        setCurrentIndex(prev => {
+          const prevIndex = prev - 1;
+          return prevIndex < 0 ? allItems.length - 1 : prevIndex;
+        });
         break;
       case 'play':
         setIsPlaying(true);
@@ -341,7 +374,7 @@ export function SlideshowPreview() {
         setIsBlackScreen(false);
         break;
     }
-  };
+  }, [allItems.length, slideshow?.settings?.loop]);
 
   const handleNext = useCallback(() => {
     if (!allItems.length) return;

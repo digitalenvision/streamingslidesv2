@@ -45,23 +45,33 @@ export function RemoteControl() {
   useEffect(() => {
     if (!id) return;
 
+    console.log('RemoteControl: Subscribing to status updates');
     const unsubscribe = subscribeToStatus(id, (newStatus) => {
+      console.log('RemoteControl: Received status update:', newStatus);
       setStatus(newStatus);
     });
 
-    return () => unsubscribe();
+    return () => {
+      console.log('RemoteControl: Unsubscribing from status updates');
+      unsubscribe();
+    };
   }, [id]);
 
   // Subscribe to heartbeat
   useEffect(() => {
     if (!id) return;
 
+    console.log('RemoteControl: Subscribing to heartbeat');
     const unsubscribe = subscribeToHeartbeat(id, (timestamp) => {
+      console.log('RemoteControl: Received heartbeat');
       setLastHeartbeat(timestamp);
       setIsPreviewActive(true);
     });
 
-    return () => unsubscribe();
+    return () => {
+      console.log('RemoteControl: Unsubscribing from heartbeat');
+      unsubscribe();
+    };
   }, [id]);
 
   // Check if preview is still active
