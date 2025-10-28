@@ -38,6 +38,48 @@ export function SlideshowPreview() {
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Handle remote commands
+  const handleCommand = useCallback((command: string, _payload?: any) => {
+    console.log('SlideshowPreview: Handling command:', command);
+    switch (command) {
+      case 'next':
+        setCurrentIndex(prev => {
+          const nextIndex = prev + 1;
+          if (nextIndex >= allItems.length) {
+            if (slideshow?.settings?.loop) {
+              return 0;
+            } else {
+              setIsPlaying(false);
+              return prev;
+            }
+          }
+          return nextIndex;
+        });
+        break;
+      case 'previous':
+        setCurrentIndex(prev => {
+          const prevIndex = prev - 1;
+          return prevIndex < 0 ? allItems.length - 1 : prevIndex;
+        });
+        break;
+      case 'play':
+        setIsPlaying(true);
+        break;
+      case 'pause':
+        setIsPlaying(false);
+        break;
+      case 'reload':
+        window.location.reload();
+        break;
+      case 'black-screen':
+        setIsBlackScreen(true);
+        break;
+      case 'show-screen':
+        setIsBlackScreen(false);
+        break;
+    }
+  }, [allItems.length, slideshow?.settings?.loop]);
+
   // Load slideshow data
   useEffect(() => {
     if (id) {
@@ -334,47 +376,6 @@ export function SlideshowPreview() {
     
     return result;
   };
-
-  const handleCommand = useCallback((command: string, _payload?: any) => {
-    console.log('SlideshowPreview: Handling command:', command);
-    switch (command) {
-      case 'next':
-        setCurrentIndex(prev => {
-          const nextIndex = prev + 1;
-          if (nextIndex >= allItems.length) {
-            if (slideshow?.settings?.loop) {
-              return 0;
-            } else {
-              setIsPlaying(false);
-              return prev;
-            }
-          }
-          return nextIndex;
-        });
-        break;
-      case 'previous':
-        setCurrentIndex(prev => {
-          const prevIndex = prev - 1;
-          return prevIndex < 0 ? allItems.length - 1 : prevIndex;
-        });
-        break;
-      case 'play':
-        setIsPlaying(true);
-        break;
-      case 'pause':
-        setIsPlaying(false);
-        break;
-      case 'reload':
-        window.location.reload();
-        break;
-      case 'black-screen':
-        setIsBlackScreen(true);
-        break;
-      case 'show-screen':
-        setIsBlackScreen(false);
-        break;
-    }
-  }, [allItems.length, slideshow?.settings?.loop]);
 
   const handleNext = useCallback(() => {
     if (!allItems.length) return;
