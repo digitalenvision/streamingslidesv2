@@ -1,0 +1,296 @@
+// The TV player. Lives at /preview/:id so the address already set up on the club's
+// computer keeps working: the id can be a screen id or the old slideshow id a screen
+// has taken over. Anything else falls back to the legacy player.
+//
+// Why it's fast: it plays the 1920px versions (~250 KB instead of multi-MB camera
+// files), starts as soon as the first photo is decoded, keeps the next few photos
+// decoded in the background, and the service worker keeps played photos on the TV.
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
+import { screenChannel, type Command, type PlayerStatus } from '@/lib/remote';
+import { formatDate } from '@/lib/format';
+import { Logo, Mark } from '@/components/ui';
+import type { Playlist, Transition } from '@/types';
+import { buildSequence, type Slide } from './sequence';
+
+const LegacyPreview = lazy(() => import('@/legacy/SlideshowPreview').then((m) => ({ default: m.SlideshowPreview })));
+
+const AHEAD = 4;
+const READY_TIMEOUT = 10_000;
+const REFRESH_DEBOUNCE = 8_000;
+const POLL_MS = 5 * 60_000;
+const STATUS_MS = 10_000;
+const playerId = (() => {
+  try {
+    return (localStorage.gustoPlayerId ??= crypto.randomUUID().slice(0, 8));
+  } catch {
+    return crypto.randomUUID().slice(0, 8);
+  }
+})();
+
+// --- image preloading -------------------------------------------------------------
+const ready = new Map<string, Promise<boolean>>();
+function preload(slide: Slide): Promise<boolean> {
+  if (slide.kind === 'promo' && slide.promoKind === 'video') return Promise.resolve(true);
+  let p = ready.get(slide.src);
+  if (!p) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = slide.src;
+    p = img.decode().then(() => true, () => false);
+    ready.set(slide.src, p);
+    if (ready.size > 40) ready.delete(ready.keys().next().value!);
+  }
+  return Promise.race([p, new Promise<boolean>((r) => setTimeout(() => r(false), READY_TIMEOUT))]);
+}
+
+// --- playlist ---------------------------------------------------------------------
+async function fetchPlaylist(id: string): Promise<Playlist | null | 'offline'> {
+  const { data, error } = await supabase.rpc('screen_playlist', { p_screen_id: id });
+  if (error) {
+    try {
+      const cached = localStorage.getItem(`gusto-playlist:${id}`);
+      return cached ? (JSON.parse(cached) as Playlist) : 'offline';
+    } catch {
+      return 'offline';
+    }
+  }
+  if (data) try { localStorage.setItem(`gusto-playlist:${id}`, JSON.stringify(data)); } catch { /* storage full: fine */ }
+  return data as Playlist | null;
+}
+
+export function Player() {
+  const { id } = useParams<{ id: string }>();
+  const [playlist, setPlaylist] = useState<Playlist | null | undefined>(undefined);
+
+  useEffect(() => {
+    let stop = false;
+    const load = async (attempt = 0) => {
+      const result = await fetchPlaylist(id!);
+      if (stop) return;
+      if (result === 'offline') setTimeout(() => load(attempt + 1), Math.min(30_000, 2000 * 2 ** attempt));
+      else setPlaylist(result);
+    };
+    load();
+    return () => { stop = true; };
+  }, [id]);
+
+  if (playlist === undefined) return <Idle />;
+  if (playlist === null) return <Suspense fallback={<Idle />}><LegacyPreview /></Suspense>;
+  return <Show id={id!} initial={playlist} />;
+}
+
+function Show({ id, initial }: { id: string; initial: Playlist }) {
+  const [playlist, setPlaylist] = useState(initial);
+  const slides = useMemo(() => buildSequence(playlist), [playlist]);
+  const [index, setIndex] = useState(0);
+  const [layers, setLayers] = useState<{ slide: Slide; n: number }[]>([]);
+  const [playing, setPlaying] = useState(true);
+  const [black, setBlack] = useState(false);
+  const [started, setStarted] = useState(false);
+  const screen = playlist.screen;
+  const transition: Transition = screen.transition;
+  const counter = useRef(0);
+  const advancing = useRef(false);
+  const state = useRef({ index, slides, playing, black });
+  state.current = { index, slides, playing, black };
+
+  // Show a slide once it's decoded (skipping ones that fail to load).
+  const goTo = useCallback(async (target: number, step = 1) => {
+    const list = state.current.slides;
+    if (!list.length || advancing.current) return;
+    advancing.current = true;
+    try {
+      for (let tries = 0; tries < Math.min(list.length, 12); tries++) {
+        const i = ((target + tries * step) % list.length + list.length) % list.length;
+        if (await preload(list[i])) {
+          setIndex(i);
+          setLayers((prev) => [...prev.slice(-1), { slide: list[i], n: ++counter.current }]);
+          setStarted(true);
+          return;
+        }
+      }
+    } finally {
+      advancing.current = false;
+    }
+  }, []);
+
+  const next = useCallback(() => goTo(state.current.index + 1), [goTo]);
+  const previous = useCallback(() => goTo(state.current.index - 1, -1), [goTo]);
+
+  // First slide.
+  useEffect(() => { goTo(0); }, [goTo]);
+
+  // Keep the next few slides decoded.
+  useEffect(() => {
+    for (let k = 1; k <= AHEAD && k < slides.length; k++) preload(slides[(index + k) % slides.length]);
+  }, [index, slides]);
+
+  // Timer for the current slide (videos advance when they end).
+  const top = layers.at(-1);
+  useEffect(() => {
+    const current = top?.slide;
+    if (!playing || !current || slides.length < 2) return;
+    if (current.kind === 'promo' && current.promoKind === 'video') return;
+    const t = setTimeout(next, current.seconds * 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [top?.n, playing, next, slides.length]);
+
+  // Drop the layer underneath once the new one has finished coming in.
+  useEffect(() => {
+    if (layers.length < 2) return;
+    const t = setTimeout(() => setLayers((prev) => prev.slice(-1)), 1400);
+    return () => clearTimeout(t);
+  }, [layers]);
+
+  // Playlist changes: Realtime on the screen row, plus a slow poll as a safety net.
+  const refresh = useCallback(async () => {
+    const fresh = await fetchPlaylist(id);
+    if (!fresh || fresh === 'offline') return;
+    setPlaylist((old) => (JSON.stringify(old) === JSON.stringify(fresh) ? old : fresh));
+  }, [id]);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const soon = () => { clearTimeout(timer); timer = setTimeout(refresh, REFRESH_DEBOUNCE); };
+    const ch = supabase
+      .channel(`screen-row:${screen.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'screens', filter: `id=eq.${screen.id}` }, soon)
+      .subscribe((s) => { if (s === 'SUBSCRIBED') soon(); });
+    const poll = setInterval(refresh, POLL_MS);
+    return () => { clearTimeout(timer); clearInterval(poll); ch.unsubscribe(); };
+  }, [screen.id, refresh]);
+
+  // After a playlist change, carry on from the same slide if it's still there.
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    const key = state.current.slides[state.current.index]?.key;
+    const at = slides.findIndex((s) => s.key === key);
+    setIndex(at >= 0 ? at : 0);
+    if (at < 0) goTo(0);
+    // Tell the service worker which photos to keep on the TV.
+    navigator.serviceWorker?.controller?.postMessage({ type: 'keep', urls: slides.filter((s) => s.kind === 'photo').map((s) => s.src) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slides]);
+  useEffect(() => {
+    navigator.serviceWorker?.ready.then((reg) => reg.active?.postMessage({ type: 'keep', urls: slides.filter((s) => s.kind === 'photo').map((s) => s.src) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Remote control and status heartbeat.
+  const channel = useRef<ReturnType<typeof screenChannel> | null>(null);
+  const report = useCallback(() => {
+    const { index: i, slides: list, playing: p, black: b } = state.current;
+    const s = list[i];
+    const status: PlayerStatus = {
+      player: playerId, playing: p, black: b, index: i, total: list.length,
+      albums: playlist.albums.length, promos: playlist.promos.length, version: screen.content_version,
+      now: s ? (s.kind === 'photo' ? { kind: 'photo', album: s.album, src: s.thumb } : { kind: 'promo', title: s.title, src: s.promoKind === 'image' ? s.src : undefined }) : null,
+      ua: navigator.userAgent, at: Date.now(),
+    };
+    channel.current?.send({ type: 'broadcast', event: 'status', payload: status });
+  }, [playlist, screen.content_version]);
+
+  useEffect(() => {
+    const ch = screenChannel(screen.id);
+    ch.on('broadcast', { event: 'command' }, ({ payload }) => {
+      const command = payload.command as Command;
+      if (command === 'next') next();
+      if (command === 'previous') previous();
+      if (command === 'play') setPlaying(true);
+      if (command === 'pause') setPlaying(false);
+      if (command === 'black') setBlack(true);
+      if (command === 'unblack') setBlack(false);
+      if (command === 'reload') location.reload();
+    })
+      .on('broadcast', { event: 'hello' }, () => report())
+      .subscribe((s) => { if (s === 'SUBSCRIBED') report(); });
+    channel.current = ch;
+    const beat = setInterval(report, STATUS_MS);
+    return () => { clearInterval(beat); ch.unsubscribe(); channel.current = null; };
+  }, [screen.id, next, previous, report]);
+  useEffect(() => { report(); }, [index, playing, black, report]);
+
+  // Keyboard, idle cursor, keep the TV awake.
+  const [cursor, setCursor] = useState(false);
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout>;
+    const move = () => { setCursor(true); clearTimeout(t); t = setTimeout(() => setCursor(false), 2500); };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') next();
+      if (e.key === 'ArrowLeft') previous();
+      if (e.key === ' ') setPlaying((p) => !p);
+      if (e.key === 'b') setBlack((b) => !b);
+      if (e.key === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {});
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('keydown', key);
+    let lock: WakeLockSentinel | undefined;
+    const wake = () => navigator.wakeLock?.request('screen').then((l) => { lock = l; }, () => {});
+    wake();
+    document.addEventListener('visibilitychange', wake);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('keydown', key);
+      document.removeEventListener('visibilitychange', wake);
+      lock?.release();
+    };
+  }, [next, previous]);
+
+  // Service worker: only the player registers it.
+  useEffect(() => {
+    navigator.serviceWorker?.register('/player-sw.js').catch(() => {});
+  }, []);
+
+  if (!slides.length) return <Idle message="Tonight’s photos are on their way" />;
+
+  return (
+    <div
+      className={`player fixed inset-0 overflow-hidden bg-black ${cursor ? '' : 'cursor-none'}`}
+      data-transition={transition}
+      onDoubleClick={() => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {}))}
+    >
+      {layers.map(({ slide, n }) => (
+        <div key={n} className="player-layer absolute inset-0" style={{ ['--secs' as string]: `${slide.seconds}s` }}>
+          {slide.kind === 'photo' ? (
+            <>
+              {slide.h > slide.w * 0.8 && (
+                <img src={slide.backdrop} crossOrigin="anonymous" alt="" className="absolute inset-0 size-full scale-110 object-cover opacity-60 blur-3xl" />
+              )}
+              <img src={slide.src} crossOrigin="anonymous" alt="" className="player-photo absolute inset-0 size-full object-contain" />
+              {screen.show_album_titles && (
+                <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/70 to-transparent px-[3vw] pb-[2.6vw] pt-[8vw]">
+                  <div className="grid gap-[.3vw]">
+                    <span className="font-display text-[2.1vw] font-bold leading-none tracking-tight text-white">{slide.album}</span>
+                    <span className="text-[1.05vw] font-medium uppercase tracking-[.2em] text-gold">{formatDate(slide.date, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+                  </div>
+                  <Mark className="h-[3.2vw] opacity-90" />
+                </div>
+              )}
+            </>
+          ) : slide.promoKind === 'video' ? (
+            <video src={slide.src} autoPlay muted playsInline className="absolute inset-0 size-full object-contain" onEnded={next} onError={next} />
+          ) : (
+            <img src={slide.src} alt="" className="absolute inset-0 size-full object-contain" />
+          )}
+        </div>
+      ))}
+      {!started && <Idle />}
+      <div className={`pointer-events-none absolute inset-0 z-10 bg-black transition-opacity duration-700 ${black ? 'opacity-100' : 'opacity-0'}`} />
+    </div>
+  );
+}
+
+function Idle({ message }: { message?: string }) {
+  return (
+    <div className="fixed inset-0 z-20 grid place-items-center bg-[radial-gradient(60%_60%_at_50%_40%,#2b094c,#07040d)]">
+      <div className="grid place-items-center gap-[2vw]">
+        <Logo className="w-[22vw] animate-pulse" />
+        {message && <p className="text-[1.4vw] text-white/60">{message}</p>}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,116 @@
+// All reads and writes of the Gusto media tables. Row access is enforced by RLS
+// (staff only for writes), so these stay thin.
+import { supabase } from './supabase';
+import { GALLERY_BUCKET, CACHE_SECONDS, ORIGINALS_BUCKET } from './media';
+import { removePhotoFiles } from './upload';
+import type { Album, Photo, Promo, RemovalRequest, Screen, Visitor } from '@/types';
+
+const ok = <T>({ data, error }: { data: T | null; error: { message: string } | null }): T => {
+  if (error) throw new Error(error.message);
+  return data as T;
+};
+
+// --- albums ---------------------------------------------------------------------
+export const listAlbums = async () =>
+  ok(await supabase.from('event_albums').select('*').order('event_date', { ascending: false }).order('created_at', { ascending: false })) as Album[];
+
+export const getAlbum = async (id: string) => ok(await supabase.from('event_albums').select('*').eq('id', id).single()) as Album;
+
+export const createAlbum = async (input: Pick<Album, 'title' | 'event_date' | 'slug'>) =>
+  ok(await supabase.from('event_albums').insert(input).select().single()) as Album;
+
+export const updateAlbum = async (id: string, patch: Partial<Album>) =>
+  ok(await supabase.from('event_albums').update(patch).eq('id', id).select().single()) as Album;
+
+export async function deleteAlbum(album: Album) {
+  const photos = await listPhotos(album.id);
+  await removePhotoFiles(photos);
+  ok(await supabase.from('event_albums').delete().eq('id', album.id));
+}
+
+// --- photos ---------------------------------------------------------------------
+export const listPhotos = async (albumId: string) =>
+  ok(await supabase.from('event_photos').select('*').eq('album_id', albumId).order('position').order('created_at')) as Photo[];
+
+export const updatePhotos = async (ids: string[], patch: Partial<Pick<Photo, 'hidden_web' | 'hidden_screen'>>) =>
+  ok(await supabase.from('event_photos').update(patch).in('id', ids).select()) as Photo[];
+
+export async function deletePhotos(photos: Photo[]) {
+  await removePhotoFiles(photos);
+  ok(await supabase.from('event_photos').delete().in('id', photos.map((p) => p.id)));
+}
+
+export const reorderPhotos = async (albumId: string, ids: string[]) =>
+  ok(await supabase.rpc('reorder_photos', { p_album_id: albumId, p_photo_ids: ids }));
+
+export async function downloadUrl(photo: Photo) {
+  const { data, error } = await supabase.storage
+    .from(ORIGINALS_BUCKET)
+    .createSignedUrl(`albums/${photo.album_id}/${photo.id}.jpg`, 300, { download: photo.original_name ?? true });
+  if (error) throw new Error(error.message);
+  return data.signedUrl;
+}
+
+// --- promo slides ---------------------------------------------------------------
+export const listPromos = async () =>
+  ok(await supabase.from('promo_slides').select('*').order('position').order('created_at', { ascending: false })) as Promo[];
+
+export async function createPromo(file: File, input: Omit<Promo, 'id' | 'path' | 'kind' | 'width' | 'height' | 'created_at' | 'position'>) {
+  const id = crypto.randomUUID();
+  const kind = file.type.startsWith('video/') ? 'video' : 'image';
+  const ext = (file.name.split('.').pop() || (kind === 'video' ? 'mp4' : 'jpg')).toLowerCase();
+  const path = `promos/${id}/${Date.now()}.${ext}`;
+  const size = await mediaSize(file, kind);
+  const { error } = await supabase.storage.from(GALLERY_BUCKET).upload(path, file, { cacheControl: CACHE_SECONDS, contentType: file.type });
+  if (error) throw new Error(error.message);
+  return ok(await supabase.from('promo_slides').insert({ id, kind, path, ...size, ...input }).select().single()) as Promo;
+}
+
+export const updatePromo = async (id: string, patch: Partial<Promo>) =>
+  ok(await supabase.from('promo_slides').update(patch).eq('id', id).select().single()) as Promo;
+
+export async function deletePromo(promo: Promo) {
+  await supabase.storage.from(GALLERY_BUCKET).remove([promo.path]);
+  ok(await supabase.from('promo_slides').delete().eq('id', promo.id));
+}
+
+function mediaSize(file: File, kind: 'image' | 'video'): Promise<{ width: number | null; height: number | null }> {
+  const url = URL.createObjectURL(file);
+  return new Promise((resolve) => {
+    const done = (width: number | null, height: number | null) => {
+      URL.revokeObjectURL(url);
+      resolve({ width, height });
+    };
+    if (kind === 'image') {
+      const img = new Image();
+      img.onload = () => done(img.naturalWidth, img.naturalHeight);
+      img.onerror = () => done(null, null);
+      img.src = url;
+    } else {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.onloadedmetadata = () => done(video.videoWidth, video.videoHeight);
+      video.onerror = () => done(null, null);
+      video.src = url;
+    }
+  });
+}
+
+// --- screens --------------------------------------------------------------------
+export const listScreens = async () => ok(await supabase.from('screens').select('*').order('created_at')) as Screen[];
+export const getScreen = async (id: string) => ok(await supabase.from('screens').select('*').eq('id', id).single()) as Screen;
+export const createScreen = async (name: string) => ok(await supabase.from('screens').insert({ name }).select().single()) as Screen;
+export const updateScreen = async (id: string, patch: Partial<Screen>) =>
+  ok(await supabase.from('screens').update(patch).eq('id', id).select().single()) as Screen;
+export const deleteScreen = async (id: string) => ok(await supabase.from('screens').delete().eq('id', id));
+
+// --- visitors & removal requests ------------------------------------------------
+export const listVisitors = async () =>
+  ok(await supabase.from('gallery_visitors').select('*').order('created_at', { ascending: false }).limit(5000)) as Visitor[];
+export const deleteVisitor = async (id: string) => ok(await supabase.from('gallery_visitors').delete().eq('id', id));
+
+export const listRemovalRequests = async () =>
+  ok(await supabase.from('photo_removal_requests').select('*').order('created_at', { ascending: false })) as RemovalRequest[];
+export const updateRemovalRequest = async (id: string, status: RemovalRequest['status']) =>
+  ok(await supabase.from('photo_removal_requests').update({ status, handled_at: new Date().toISOString() }).eq('id', id));
+export const getPhoto = async (id: string) => ok(await supabase.from('event_photos').select('*').eq('id', id).maybeSingle()) as Photo | null;

@@ -1,60 +1,77 @@
+@import '@fontsource-variable/archivo';
+@import '@fontsource-variable/syne';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
   }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
+  html,
   body {
-    @apply bg-background text-foreground;
+    @apply bg-ink-950 text-white antialiased;
+    font-family: theme('fontFamily.sans');
+    font-size: 14px;
+  }
+  /* 16px stops iOS zooming into fields. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  @media (min-width: 768px) {
+    input,
+    select,
+    textarea {
+      font-size: 14px;
+    }
+  }
+  ::selection {
+    @apply bg-gold text-purple-deep;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-gold/70 ring-offset-2 ring-offset-ink-950;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display font-bold tracking-tight;
   }
 }
 
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-line bg-ink-900;
+  }
+  .label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-mute;
+  }
+  .field {
+    @apply h-11 w-full rounded-xl border border-line bg-ink-850 px-3.5 text-white placeholder:text-white/30 transition-colors
+      hover:border-white/15 focus:border-gold/60 focus:outline-none;
+  }
+  .skeleton {
+    @apply animate-shimmer bg-[linear-gradient(90deg,rgb(255_255_255/0.04),rgb(255_255_255/0.09),rgb(255_255_255/0.04))] bg-[length:200%_100%];
+  }
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.15) transparent;
+  }
+}
+
+/* TV player transitions: only the incoming layer animates, over the previous one. */
+@layer components {
+  .player[data-transition='fade'] .player-layer:last-child { animation: player-fade 0.9s ease both; }
+  .player[data-transition='slide'] .player-layer:last-child { animation: player-slide 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .player[data-transition='zoom'] .player-layer:last-child { animation: player-fade 1s ease both; }
+  .player[data-transition='zoom'] .player-photo { animation: player-kenburns var(--secs) linear both; }
+  @keyframes player-fade { from { opacity: 0; } }
+  @keyframes player-slide { from { transform: translateX(100%); } }
+  @keyframes player-kenburns { from { transform: scale(1); } to { transform: scale(1.06); } }
+  @media (prefers-reduced-motion: reduce) {
+    .player .player-layer:last-child, .player .player-photo { animation: none !important; }
+  }
+}
