@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Images, Plus, Search } from 'lucide-react';
 import { PageHeader } from '@/components/AppShell';
 import { AlbumCard } from '@/components/AlbumCard';
@@ -27,7 +27,9 @@ export function Albums() {
   const { data, loading } = useLoad(loadAlbumsWithCovers);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const [creating, setCreatingState] = useState(params.has('new'));
+  const setCreating = (v: boolean) => { setCreatingState(v); if (!v && params.has('new')) setParams({}, { replace: true }); };
 
   const shown = useMemo(() => {
     if (!data) return [];

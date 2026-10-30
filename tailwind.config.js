@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-// Dark only. Colours follow gustoaruba.com: near-black purple surfaces, Gusto gold accents.
+// Dark only (print views are light, see .print-sheet). Colours follow gustoaruba.com: near-black purple surfaces, Gusto gold accents.
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
@@ -20,10 +20,13 @@ export default {
         warn: '#ffb648',
         bad: '#ff6b6b',
         mute: 'rgb(255 255 255 / 0.56)',
+        teal: '#2dd4bf',
       },
       fontFamily: {
         sans: ['"Archivo Variable"', 'Archivo', 'system-ui', 'sans-serif'],
         display: ['"Syne Variable"', 'Syne', 'system-ui', 'sans-serif'],
+        // Times, counts and labels: the "control room" voice of Command.
+        mono: ['"Martian Mono Variable"', '"Martian Mono"', 'ui-monospace', 'monospace'],
       },
       borderRadius: { xl: '14px', '2xl': '20px' },
       boxShadow: {

@@ -69,7 +69,7 @@ export const IconButton = forwardRef<HTMLButtonElement, ButtonProps & { label: s
 });
 
 // --- form controls --------------------------------------------------------------
-export function Field({ label, hint, error, children, className }: { label: string; hint?: ReactNode; error?: string; children: (id: string) => ReactNode; className?: string }) {
+export function Field({ label, hint, error, children, className }: { label: ReactNode; hint?: ReactNode; error?: string; children: (id: string) => ReactNode; className?: string }) {
   const id = useId();
   return (
     <div className={cn('grid gap-1.5', className)}>
@@ -261,4 +261,35 @@ export function useConfirm() {
     </Dialog>
   );
   return { confirm, dialog };
+}
+
+// --- time picker ------------------------------------------------------------------
+// A list of times in 15-minute steps, in club order (from 10:00 AM round to 9:45 AM the
+// next morning), shown as AM/PM.
+const clock12 = (h: number, m: number) => `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+const TIME_STEPS = Array.from({ length: 96 }, (_, i) => {
+  const mins = (10 * 60 + i * 15) % 1440;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+});
+const between = (from: string, to: string) => TIME_STEPS.slice(TIME_STEPS.indexOf(from), TIME_STEPS.indexOf(to) + 1);
+/** Bar and security work 5:00 PM to 5:00 AM; DJs 6:00 PM to 5:00 AM. */
+export const STAFF_HOURS = between('17:00', '05:00');
+export const DJ_HOURS = between('18:00', '05:00');
+export const timeLabel = (t: string) => {
+  const [h, m] = t.split(':').map(Number);
+  return clock12(h, m);
+};
+
+export function TimeSelect({ value, onChange, placeholder, className, id, steps = STAFF_HOURS, 'aria-label': ariaLabel }: {
+  value: string | null; onChange: (v: string | null) => void; placeholder?: string; className?: string; id?: string; steps?: string[]; 'aria-label'?: string;
+}) {
+  const v = value ? value.slice(0, 5) : '';
+  const options = v && !steps.includes(v) ? [v, ...steps] : steps;
+  return (
+    <select id={id} aria-label={ariaLabel} value={v} onChange={(e) => onChange(e.target.value || null)} className={cn('field w-auto pr-8', className)}>
+      {placeholder !== undefined && <option value="">{placeholder}</option>}
+      {options.map((t) => <option key={t} value={t}>{timeLabel(t)}</option>)}
+    </select>
+  );
 }

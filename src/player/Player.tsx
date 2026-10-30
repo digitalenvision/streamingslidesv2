@@ -97,6 +97,8 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
   state.current = { index, slides, playing, black };
 
   // Show a slide once it's decoded (skipping ones that fail to load).
+  // The slide on screen right now (state.current.slides is already the new list after a refresh).
+  const shown = useRef<string | null>(null);
   const goTo = useCallback(async (target: number, step = 1) => {
     const list = state.current.slides;
     if (!list.length || advancing.current) return;
@@ -106,6 +108,7 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
         const i = ((target + tries * step) % list.length + list.length) % list.length;
         if (await preload(list[i])) {
           setIndex(i);
+          shown.current = list[i].key;
           setLayers((prev) => [...prev.slice(-1), { slide: list[i], n: ++counter.current }]);
           setStarted(true);
           return;
@@ -166,10 +169,11 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
   const firstRun = useRef(true);
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; }
-    const key = state.current.slides[state.current.index]?.key;
-    const at = slides.findIndex((s) => s.key === key);
-    setIndex(at >= 0 ? at : 0);
-    if (at < 0) goTo(0);
+    const at = slides.findIndex((s) => s.key === shown.current);
+    // A slide that's gone (photo removed) leaves the screen right away; carry on from there.
+    const from = Math.min(state.current.index, Math.max(0, slides.length - 1));
+    setIndex(at >= 0 ? at : from);
+    if (at < 0) goTo(from);
     // Tell the service worker which photos to keep on the TV.
     navigator.serviceWorker?.controller?.postMessage({ type: 'keep', urls: slides.filter((s) => s.kind === 'photo').map((s) => s.src) });
     // eslint-disable-next-line react-hooks/exhaustive-deps

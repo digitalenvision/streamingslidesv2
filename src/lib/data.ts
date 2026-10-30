@@ -111,6 +111,16 @@ export const deleteVisitor = async (id: string) => ok(await supabase.from('galle
 
 export const listRemovalRequests = async () =>
   ok(await supabase.from('photo_removal_requests').select('*').order('created_at', { ascending: false })) as RemovalRequest[];
-export const updateRemovalRequest = async (id: string, status: RemovalRequest['status']) =>
-  ok(await supabase.from('photo_removal_requests').update({ status, handled_at: new Date().toISOString() }).eq('id', id));
+/** Photos waiting for a decision (several requests for one photo count once). */
+export const countOpenRemovals = async () => {
+  const { data, error } = await supabase.from('photo_removal_requests').select('id,photo_id').eq('status', 'open').limit(1000);
+  return error || !data ? 0 : new Set(data.map((r) => r.photo_id ?? r.id)).size;
+};
+/** Close requests without deleting anything (declined, or the photo was already gone). */
+export const closeRemovalRequests = async (ids: string[], status: 'done' | 'rejected', note?: string) =>
+  ok(await supabase.from('photo_removal_requests').update({ status, decision_note: note?.trim() || null }).in('id', ids).eq('status', 'open'));
+export const getPhotos = async (ids: string[]) =>
+  ids.length ? (ok(await supabase.from('event_photos').select('*').in('id', ids)) as Photo[]) : [];
+export const listAdminNames = async () =>
+  ok(await supabase.from('admin_users').select('user_id,name,email')) as { user_id: string; name: string | null; email: string }[];
 export const getPhoto = async (id: string) => ok(await supabase.from('event_photos').select('*').eq('id', id).maybeSingle()) as Photo | null;
