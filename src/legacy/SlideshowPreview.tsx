@@ -32,10 +32,10 @@ export function SlideshowPreview() {
   const [showControls, setShowControls] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cachedUrls, setCachedUrls] = useState<Map<string, string>>(new Map());
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Handle remote commands
   const handleCommand = useCallback((command: string, _payload?: any) => {
