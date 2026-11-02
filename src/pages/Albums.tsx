@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/AppShell';
 import { AlbumCard } from '@/components/AlbumCard';
 import { Button, Dialog, Empty, Field, Input, Segmented, useToast } from '@/components/ui';
 import { createAlbum, listAlbums, listScreens } from '@/lib/data';
-import { albumSlug, arubaToday } from '@/lib/format';
+import { albumName, albumSlug, arubaToday, longDate } from '@/lib/format';
 import { albumsOnScreen } from '@/lib/screenRules';
 import { supabase } from '@/lib/supabase';
 import { useLoad } from '@/lib/useLoad';
@@ -38,7 +38,7 @@ export function Albums() {
       if (filter === 'screens' && !data.onScreens.has(a.id)) return false;
       if (filter === 'drafts' && a.status !== 'draft') return false;
       if (filter === 'web' && !(a.status === 'published' && a.show_on_web)) return false;
-      return !q || a.title.toLowerCase().includes(q) || a.event_date.includes(q);
+      return !q || albumName(a).toLowerCase().includes(q) || a.event_date.includes(q);
     });
   }, [data, filter, query]);
 
@@ -107,7 +107,7 @@ export function NewAlbumDialog({ open, onClose }: { open: boolean; onClose: () =
       let album;
       for (let n = 1; !album; n++) {
         try {
-          album = await createAlbum({ title: title.trim(), event_date: date, slug: n === 1 ? base : `${base}-${n}` });
+          album = await createAlbum({ title: title.trim() || null, event_date: date, slug: n === 1 ? base : `${base}-${n}` });
         } catch (err) {
           if (n > 5 || !(err instanceof Error) || !err.message.includes('duplicate')) throw err;
         }
@@ -122,11 +122,11 @@ export function NewAlbumDialog({ open, onClose }: { open: boolean; onClose: () =
   return (
     <Dialog open={open} onClose={onClose} title="New album">
       <form onSubmit={submit} className="grid gap-4">
-        <Field label="Name of the night" hint="Shown on the website and on the screens.">
-          {(id) => <Input id={id} required maxLength={120} placeholder="e.g. Latin Fridays" value={title} onChange={(e) => setTitle(e.target.value)} />}
-        </Field>
         <Field label="Date of the night">{(id) => <Input id={id} type="date" required value={date} onChange={(e) => setDate(e.target.value)} />}</Field>
-        <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!title.trim()}>Create and add photos</Button>
+        <Field label="Title (optional)" hint={date ? `Leave empty and the album is called ${longDate(date)}. With a title, the date shows underneath it.` : undefined}>
+          {(id) => <Input id={id} maxLength={120} placeholder="e.g. Halloween with Tribal Kush" value={title} onChange={(e) => setTitle(e.target.value)} />}
+        </Field>
+        <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!date}>Create and add photos</Button>
       </form>
     </Dialog>
   );

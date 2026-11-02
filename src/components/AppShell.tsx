@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   Banknote, Building2, CalendarDays, CalendarOff, Flag, History, Images, LayoutGrid, ListTodo, LogOut, Mail, Megaphone, Menu, Monitor, Search, ShieldCheck,
-  SlidersHorizontal, UserCog, Users, type LucideIcon,
+  SlidersHorizontal, Star, UserCog, Users, type LucideIcon,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { countOpenRemovals } from '@/lib/data';
@@ -39,6 +39,7 @@ export const navGroups: { title: string; items: NavItem[] }[] = [
     title: 'Media',
     items: [
       { to: '/albums', label: 'Albums', icon: Images, area: 'media' },
+      { to: '/special-events', label: 'Special events', short: 'Events', icon: Star, area: 'media' },
       { to: '/promos', label: 'Promo slides', short: 'Promos', icon: Megaphone, area: 'media' },
       { to: '/screens', label: 'Screens', icon: Monitor, area: 'media' },
       { to: '/removals', label: 'Removal requests', short: 'Removals', icon: Flag, area: 'media' },

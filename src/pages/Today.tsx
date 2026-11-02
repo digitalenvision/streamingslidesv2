@@ -9,7 +9,7 @@ import { Badge, Button } from '@/components/ui';
 import { NameOrLogo } from '@/components/staff';
 import { NewAlbumDialog, loadAlbumsWithCovers } from './Albums';
 import { listPromos, listRemovalRequests } from '@/lib/data';
-import { arubaToday, cn, formatDate, plural } from '@/lib/format';
+import { albumName, arubaToday, cn, formatDate, plural } from '@/lib/format';
 import { TIME_OFF, addDays, cellAt, formatRange, fmtTime, isoWeek, nextBirthday, weekStart, weekday } from '@/lib/schedule';
 import { supabase } from '@/lib/supabase';
 import { displayName, useAuth } from '@/lib/auth';
@@ -264,7 +264,7 @@ function MediaToday() {
         {drafts.length > 0 && (
           <Link to={`/albums/${drafts[0].id}`} className="panel flex items-center gap-3 border-warn/30 bg-warn/[0.06] p-4 hover:border-warn/50">
             <Badge tone="warn" dot>Draft</Badge>
-            <span className="min-w-0 flex-1 truncate">{drafts.length === 1 ? `“${drafts[0].title}” isn’t published yet.` : `${drafts.length} albums aren’t published yet.`}</span>
+            <span className="min-w-0 flex-1 truncate">{drafts.length === 1 ? `“${albumName(drafts[0])}” isn’t published yet.` : `${drafts.length} albums aren’t published yet.`}</span>
             <ArrowRight className="size-4 shrink-0 text-warn" />
           </Link>
         )}

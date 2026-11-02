@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ImageOff, Monitor } from 'lucide-react';
 import type { Album, Photo } from '@/types';
-import { formatDate, plural } from '@/lib/format';
+import { albumName, formatDate, plural } from '@/lib/format';
 import { photoUrl } from '@/lib/media';
 import { Badge } from './ui';
 
@@ -27,8 +27,8 @@ export function AlbumCard({ album, cover, onScreen }: { album: Album; cover?: Pi
         </div>
       </div>
       <div className="grid gap-0.5 px-0.5">
-        <h3 className="truncate font-sans text-[15px] font-semibold tracking-normal group-hover:text-gold">{album.title}</h3>
-        <p className="text-[13px] text-mute">{formatDate(album.event_date)} · {plural(album.photo_count, 'photo')}</p>
+        <h3 className="font-sans text-[15px] font-semibold tracking-normal group-hover:text-gold">{albumName(album)}</h3>
+        <p className="text-[13px] text-mute">{album.title && `${formatDate(album.event_date)} · `}{plural(album.photo_count, 'photo')}</p>
       </div>
     </Link>
   );

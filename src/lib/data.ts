@@ -3,11 +3,29 @@
 import { supabase } from './supabase';
 import { GALLERY_BUCKET, CACHE_SECONDS, ORIGINALS_BUCKET } from './media';
 import { removePhotoFiles } from './upload';
-import type { Album, Photo, Promo, RemovalRequest, Screen, Visitor } from '@/types';
+import type { Album, EventSetting, Photo, Promo, RemovalRequest, Screen, UpcomingEvent, Visitor } from '@/types';
 
 const ok = <T>({ data, error }: { data: T | null; error: { message: string } | null }): T => {
   if (error) throw new Error(error.message);
   return data as T;
+};
+
+// --- special events -------------------------------------------------------------
+// The nights come from the website, which holds the Fourvenues key. Always the www address:
+// the bare domain redirects, and a redirect has no CORS header.
+const WEBSITE = (import.meta.env.VITE_WEBSITE_URL || 'https://www.gustoaruba.com').replace('//gustoaruba.com', '//www.gustoaruba.com');
+
+export async function listUpcomingEvents() {
+  const res = await fetch(`${WEBSITE}/api/events/upcoming/`);
+  if (!res.ok) throw new Error('Could not get the nights from the website');
+  return (await res.json()).events as UpcomingEvent[];
+}
+
+export const listEventSettings = async () =>
+  ok(await supabase.from('event_settings').select('code,highlighted,no_happy_hour')) as EventSetting[];
+
+export const saveEventSetting = async (event: UpcomingEvent, setting: EventSetting) => {
+  ok(await supabase.from('event_settings').upsert({ ...setting, name: event.name, starts_at: event.start }, { onConflict: 'code' }));
 };
 
 // --- albums ---------------------------------------------------------------------

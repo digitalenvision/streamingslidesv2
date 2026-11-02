@@ -6,7 +6,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { ChevronDown, History } from 'lucide-react';
 import { PageHeader } from '@/components/AppShell';
 import { Button, Empty, Input, Spinner } from '@/components/ui';
-import { cn } from '@/lib/format';
+import { albumName, cn, longDate } from '@/lib/format';
 import { listAlbums } from '@/lib/data';
 import { TIME_OFF, fmtTime, formatRange } from '@/lib/schedule';
 import { listAccounts, listActivity, listDepartments, listEmployees } from '@/lib/staff';
@@ -20,7 +20,7 @@ const AREAS: Record<string, { label: string; tables: string[] }> = {
   schedule: { label: 'Schedules', tables: ['shifts', 'posts', 'night_openers', 'schedule_weeks', 'schedule_days', 'time_off'] },
   people: { label: 'People', tables: ['employees'] },
   rules: { label: 'Rules', tables: ['departments', 'shift_types'] },
-  media: { label: 'Media', tables: ['event_albums', 'event_photos', 'promo_slides', 'screens', 'photo_removal_requests', 'gallery_visitors'] },
+  media: { label: 'Media', tables: ['event_albums', 'event_photos', 'promo_slides', 'screens', 'photo_removal_requests', 'gallery_visitors', 'event_settings'] },
   tasks: { label: 'Tasks', tables: ['tasks', 'task_comments'] },
   money: { label: 'Payments & vendors', tables: ['payment_requests', 'payment_files', 'payment_comments', 'vendors'] },
   accounts: { label: 'Accounts & sign-ins', tables: ['admin_accounts', 'session'] },
@@ -48,7 +48,7 @@ export function Activity() {
       people: new Map(accounts.map((a) => [a.user_id, a.name ?? a.email?.split('@')[0] ?? 'Someone'])),
       employees: new Map(employees.map((e) => [e.id, e.name])),
       departments: new Map(departments.map((d) => [d.id, d.plural])),
-      albums: new Map(albums.map((a) => [a.id, a.title])),
+      albums: new Map(albums.map((a) => [a.id, albumName(a)])),
       tasks: new Map(tasks.map((t) => [t.id, t.title])),
     };
   });
@@ -213,9 +213,15 @@ function describe(r: AuditEntry, L: Lookups): string {
     case 'posts': return `${verb} post ${str(x.location)} on ${day(x.date)}${r.action === 'update' ? `${fields ? `: ${fields}` : ''}` : ''}`;
     case 'departments': return r.action === 'update' ? `changed the rules for ${title}${fields ? `: ${fields}` : ''}` : `${verb} team ${title}`;
     case 'shift_types': return `${verb} shift ${title} for ${L.departments.get(str(x.department_id)) ?? 'a team'}${r.action === 'update' ? `${fields ? `: ${fields}` : ''}` : ''}`;
-    case 'event_albums':
-      if (r.action === 'update' && ch.status && x.status === 'published') return `published album “${title}”`;
-      return r.action === 'update' ? `changed album “${title}”${fields ? `: ${fields}` : ''}` : `${r.action === 'insert' ? 'created' : 'deleted'} album “${title}”`;
+    case 'event_albums': {
+      const album = title || longDate(str(x.event_date));
+      if (r.action === 'update' && ch.status && x.status === 'published') return `published album “${album}”`;
+      return r.action === 'update' ? `changed album “${album}”${fields ? `: ${fields}` : ''}` : `${r.action === 'insert' ? 'created' : 'deleted'} album “${album}”`;
+    }
+    case 'event_settings':
+      if (ch.highlighted) return `${x.highlighted ? 'highlighted' : 'stopped highlighting'} “${title}”`;
+      if (r.action === 'insert' && x.highlighted) return `highlighted “${title}”`;
+      return `turned happy hour ${x.no_happy_hour ? 'off' : 'on'} for “${title}”`;
     case 'event_photos': {
       const album = L.albums.get(str(x.album_id)) ?? 'an album';
       return r.action === 'insert' ? `added a photo to “${album}”` : r.action === 'delete' ? `deleted a photo from “${album}”` : `changed a photo in “${album}”${fields ? `: ${fields}` : ''}`;

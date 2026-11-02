@@ -7,7 +7,7 @@ export type ImageFormat = 'webp' | 'jpg';
 export interface Album {
   id: string;
   slug: string;
-  title: string;
+  title: string | null; // without one, the album goes by its date
   event_date: string; // YYYY-MM-DD
   description: string | null;
   fourvenues_code: string | null;
@@ -34,6 +34,21 @@ export interface Photo {
   hidden_web: boolean;
   hidden_screen: boolean;
   created_at: string;
+}
+
+/** A coming night, as the website gets it from Fourvenues. */
+export interface UpcomingEvent {
+  code: string;
+  name: string;
+  start: string;
+  end: string;
+  image: string | null;
+}
+
+export interface EventSetting {
+  code: string;
+  highlighted: boolean;
+  no_happy_hour: boolean;
 }
 
 export interface Promo {
@@ -102,7 +117,7 @@ export interface RemovalRequest {
 /** What `screen_playlist(screen_id)` returns. */
 export interface Playlist {
   screen: Omit<Screen, 'updated_at'>;
-  albums: { id: string; title: string; event_date: string; photos: { id: string; w: number; h: number; f: ImageFormat }[] }[];
+  albums: { id: string; title: string | null; event_date: string; photos: { id: string; w: number; h: number; f: ImageFormat }[] }[];
   promos: { id: string; title: string; kind: 'image' | 'video'; path: string; w: number | null; h: number | null; duration_seconds: number; every_n: number }[];
 }
 

@@ -3,7 +3,7 @@ import { Download, Mail, Search, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/AppShell';
 import { Badge, Button, Empty, IconButton, Input, useConfirm, useToast } from '@/components/ui';
 import { deleteVisitor, listAlbums, listVisitors } from '@/lib/data';
-import { plural, relativeTime } from '@/lib/format';
+import { albumName, plural, relativeTime } from '@/lib/format';
 import { useLoad } from '@/lib/useLoad';
 
 export function Visitors() {
@@ -21,7 +21,11 @@ export function Visitors() {
   );
 }
 
-function Emails({ data, onDelete }: { data: { visitors: Awaited<ReturnType<typeof listVisitors>>; albums: Map<string, { title: string }> }; onDelete: (id: string) => void }) {
+function Emails({ data, onDelete }: { data: { visitors: Awaited<ReturnType<typeof listVisitors>>; albums: Map<string, { title: string | null; event_date: string }> }; onDelete: (id: string) => void }) {
+  const firstAlbum = (v: { first_album_id: string | null }) => {
+    const album = data.albums.get(v.first_album_id ?? '');
+    return album && albumName(album);
+  };
   const toast = useToast();
   const { confirm, dialog } = useConfirm();
   const [query, setQuery] = useState('');
@@ -32,7 +36,7 @@ function Emails({ data, onDelete }: { data: { visitors: Awaited<ReturnType<typeo
     const rows = data.visitors.filter((v) => !marketingOnly || v.marketing_opt_in);
     const csv = [
       'email,marketing_opt_in,first_album,downloads,joined',
-      ...rows.map((v) => [v.email, v.marketing_opt_in, `"${(data.albums.get(v.first_album_id ?? '')?.title ?? '').replace(/"/g, '""')}"`, v.downloads, v.created_at].join(',')),
+      ...rows.map((v) => [v.email, v.marketing_opt_in, `"${(firstAlbum(v) ?? '').replace(/"/g, '""')}"`, v.downloads, v.created_at].join(',')),
     ].join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -66,7 +70,7 @@ function Emails({ data, onDelete }: { data: { visitors: Awaited<ReturnType<typeo
             <div className="grid min-w-0 flex-1 gap-0.5">
               <span className="truncate font-medium">{v.email}</span>
               <span className="truncate text-[12.5px] text-mute">
-                {relativeTime(v.created_at)}{v.first_album_id && data.albums.get(v.first_album_id) ? ` · ${data.albums.get(v.first_album_id)!.title}` : ''}{v.downloads ? ` · ${plural(v.downloads, 'download')}` : ''}
+                {relativeTime(v.created_at)}{firstAlbum(v) ? ` · ${firstAlbum(v)}` : ''}{v.downloads ? ` · ${plural(v.downloads, 'download')}` : ''}
               </span>
             </div>
             {v.marketing_opt_in && <Badge tone="gold">Opted in</Badge>}

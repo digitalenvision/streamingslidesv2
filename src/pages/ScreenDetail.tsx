@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/AppShell';
 import { playerAddress } from './Screens';
 import { Badge, Button, Field, IconButton, Input, Segmented, Spinner, Switch, useConfirm, useToast } from '@/components/ui';
 import { deleteScreen, getScreen, listScreens, removeScreenBackground, updateScreen, uploadScreenBackground } from '@/lib/data';
-import { formatDate, plural } from '@/lib/format';
+import { albumName, formatDate, plural } from '@/lib/format';
 import { publicUrl } from '@/lib/media';
 import { supabase } from '@/lib/supabase';
 import { useLoad } from '@/lib/useLoad';
@@ -110,7 +110,7 @@ export function ScreenDetail() {
                 <ul className="grid gap-1.5 text-[13px]">
                   {playlist.albums.map((a) => (
                     <li key={a.id} className="flex justify-between gap-3 border-t border-line pt-1.5">
-                      <Link to={`/albums/${a.id}`} className="truncate hover:text-gold">{a.title}</Link>
+                      <Link to={`/albums/${a.id}`} className="truncate hover:text-gold">{albumName(a)}</Link>
                       <span className="shrink-0 text-mute">{formatDate(a.event_date, { month: 'short', day: 'numeric' })} · {a.photos.length}</span>
                     </li>
                   ))}

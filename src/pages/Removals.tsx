@@ -7,7 +7,7 @@ import { Check, ExternalLink, Flag, Globe, Monitor, Trash2, X } from 'lucide-rea
 import { PageHeader } from '@/components/AppShell';
 import { Badge, Button, Dialog, Empty, Field, Segmented, Textarea, useConfirm, useToast } from '@/components/ui';
 import { closeRemovalRequests, deletePhotos, getPhotos, listAdminNames, listAlbums, listRemovalRequests } from '@/lib/data';
-import { cn, formatDate, relativeTime } from '@/lib/format';
+import { albumName, cn, formatDate, relativeTime } from '@/lib/format';
 import { photoUrl } from '@/lib/media';
 import { useLoad } from '@/lib/useLoad';
 import type { Album, Photo, RemovalReason, RemovalRequest } from '@/types';
@@ -89,7 +89,7 @@ function OpenCard({ group, onDone }: { group: Group; onDone: () => void }) {
     }
     const ok = await confirm(
       'Remove this photo?',
-      `It’s deleted from ${album ? `“${album.title}”` : 'its album'}, taken off the website and off the screens within a minute. ${requests.length > 1 ? `All ${requests.length} requests are` : 'The request is'} marked as done. This can’t be undone.`,
+      `It’s deleted from ${album ? `“${albumName(album)}”` : 'its album'}, taken off the website and off the screens within a minute. ${requests.length > 1 ? `All ${requests.length} requests are` : 'The request is'} marked as done. This can’t be undone.`,
       'Remove photo',
     );
     if (!ok) return;
@@ -121,7 +121,7 @@ function OpenCard({ group, onDone }: { group: Group; onDone: () => void }) {
       <div className="grid min-w-0 content-start gap-3">
         <div className="grid gap-1">
           <div className="flex flex-wrap items-center gap-2">
-            {album ? <Link to={`/albums/${album.id}`} className="font-semibold hover:text-gold">{album.title}</Link> : <span className="font-semibold text-mute">Album deleted</span>}
+            {album ? <Link to={`/albums/${album.id}`} className="font-semibold hover:text-gold">{albumName(album)}</Link> : <span className="font-semibold text-mute">Album deleted</span>}
             {album && <span className="text-[12.5px] text-mute">{formatDate(album.event_date, { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
           </div>
           {photo && (
@@ -157,7 +157,7 @@ function OpenCard({ group, onDone }: { group: Group; onDone: () => void }) {
       </div>
 
       {photo && (
-        <Dialog open={zoom} onClose={() => setZoom(false)} title={album?.title ?? 'Photo'} wide>
+        <Dialog open={zoom} onClose={() => setZoom(false)} title={album ? albumName(album) : 'Photo'} wide>
           <img src={photoUrl(photo.album_id, photo.id, 1080, photo.format)} alt="" className="mx-auto max-h-[70vh] rounded-lg object-contain" />
         </Dialog>
       )}
@@ -218,7 +218,7 @@ function Handled({ requests, data }: { requests: RemovalRequest[]; data: { album
                 {r.reason_type && <span className="text-[12px] text-mute">{REASONS[r.reason_type]}</span>}
               </div>
               <span className={cn('truncate text-[12.5px] text-mute')}>
-                {album?.title ?? 'Album deleted'} · asked {relativeTime(r.created_at)}
+                {album ? albumName(album) : 'Album deleted'} · asked {relativeTime(r.created_at)}
                 {r.handled_at && ` · ${r.status === 'done' ? 'removed' : 'declined'} ${relativeTime(r.handled_at)}`}{by && ` by ${by}`}
               </span>
               {r.reason && <span className="truncate text-[12.5px] text-white/70">“{r.reason}”</span>}

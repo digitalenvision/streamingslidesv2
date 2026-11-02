@@ -11,6 +11,11 @@ const dateOnly = (d: string) => new Date(`${d}T12:00:00`);
 export const formatDate = (d: string, opts: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) =>
   dateOnly(d).toLocaleDateString('en-US', opts);
 
+/** The date written out, "Saturday October 17 2026". */
+export const longDate = (d: string) => formatDate(d, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).replace(/,/g, '');
+/** An album goes by its title, or by its date when it has none. */
+export const albumName = (a: { title: string | null; event_date: string }) => a.title || longDate(a.event_date);
+
 export const daysAgo = (d: string) => Math.round((dateOnly(arubaToday()).getTime() - dateOnly(d).getTime()) / 86_400_000);
 
 export const relativeTime = (iso: string) => {

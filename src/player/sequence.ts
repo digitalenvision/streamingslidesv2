@@ -1,10 +1,11 @@
 // Turns a screen's playlist into the order the TV plays: the albums night by night
 // (or all photos shuffled), with each promo slide dropped in after every N photos.
+import { albumName, longDate } from '@/lib/format';
 import { photoUrl, publicUrl } from '@/lib/media';
 import type { Playlist } from '@/types';
 
 export type Slide =
-  | { key: string; kind: 'photo'; src: string; thumb: string; backdrop: string; w: number; h: number; album: string; date: string; seconds: number }
+  | { key: string; kind: 'photo'; src: string; thumb: string; backdrop: string; w: number; h: number; album: string; date: string | null; seconds: number }
   | { key: string; kind: 'promo'; src: string; promoKind: 'image' | 'video'; title: string; seconds: number; w: number | null; h: number | null };
 
 const shuffle = <T,>(list: T[]) => {
@@ -27,8 +28,9 @@ export function buildSequence(playlist: Playlist): Slide[] {
       backdrop: photoUrl(album.id, p.id, 400, p.f),
       w: p.w,
       h: p.h,
-      album: album.title,
-      date: album.event_date,
+      album: albumName(album),
+      // An album without a title already goes by its date.
+      date: album.title ? longDate(album.event_date) : null,
       seconds: Number(screen.photo_seconds),
     })),
   );

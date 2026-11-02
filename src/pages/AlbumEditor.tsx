@@ -10,7 +10,7 @@ import { Badge, Button, Dialog, Empty, Field, IconButton, Input, Segmented, Spin
 import {
   deleteAlbum, deletePhotos, downloadUrl, getAlbum, listAlbums, listPhotos, listScreens, reorderPhotos, updateAlbum, updatePhotos,
 } from '@/lib/data';
-import { cn, daysAgo, formatDate, plural } from '@/lib/format';
+import { albumName, cn, daysAgo, formatDate, longDate, plural } from '@/lib/format';
 import { photoUrl } from '@/lib/media';
 import { albumsOnScreen } from '@/lib/screenRules';
 import { ACCEPTED, uploadPhotos, type UploadTask } from '@/lib/upload';
@@ -186,7 +186,7 @@ export function AlbumEditor() {
       screen={data!.screen}
       onSave={save}
       onDelete={async () => {
-        const ok = await confirm('Delete this album?', <>“{album.title}” and all {plural(album.photo_count, 'photo')} will be deleted from the website, the screens and storage. This can’t be undone.</>, 'Delete album');
+        const ok = await confirm('Delete this album?', <>“{albumName(album)}” and all {plural(album.photo_count, 'photo')} will be deleted from the website, the screens and storage. This can’t be undone.</>, 'Delete album');
         if (!ok) return;
         try {
           await deleteAlbum(album);
@@ -203,11 +203,10 @@ export function AlbumEditor() {
     <>
       <PageHeader
         back={<Link to="/albums" className="inline-flex items-center gap-1.5 text-[13px] text-mute hover:text-white"><ArrowLeft className="size-4" />Albums</Link>}
-        title={album.title}
+        title={albumName(album)}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
-            {formatDate(album.event_date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-            <span className="text-white/25">·</span>
+            {album.title && <>{longDate(album.event_date)}<span className="text-white/25">·</span></>}
             {plural(album.photo_count, 'photo')}
             {live ? <Badge tone="ok" dot>Published</Badge> : <Badge tone="warn" dot>Draft</Badge>}
           </span>
@@ -318,7 +317,7 @@ export function AlbumEditor() {
         <div className="pointer-events-none fixed inset-0 z-[70] grid place-items-center bg-ink-950/80 backdrop-blur-sm">
           <div className="grid place-items-center gap-3 rounded-3xl border-2 border-dashed border-gold px-16 py-12 text-center">
             <UploadCloud className="size-10 text-gold" />
-            <p className="text-[18px] font-semibold">Drop to add to “{album.title}”</p>
+            <p className="text-[18px] font-semibold">Drop to add to “{albumName(album)}”</p>
           </div>
         </div>
       )}
@@ -347,13 +346,13 @@ export function AlbumEditor() {
 function AlbumSettings({ album, onScreens, screen, onSave, onDelete }: {
   album: Album; onScreens: boolean; screen?: { max_days: number; max_albums: number }; onSave: (p: Partial<Album>, msg?: string) => void; onDelete: () => void;
 }) {
-  const [title, setTitle] = useState(album.title);
+  const [title, setTitle] = useState(album.title ?? '');
   const [date, setDate] = useState(album.event_date);
   const [description, setDescription] = useState(album.description ?? '');
   const [code, setCode] = useState(album.fourvenues_code ?? '');
-  useEffect(() => { setTitle(album.title); setDate(album.event_date); setDescription(album.description ?? ''); setCode(album.fourvenues_code ?? ''); }, [album.id]);
+  useEffect(() => { setTitle(album.title ?? ''); setDate(album.event_date); setDescription(album.description ?? ''); setCode(album.fourvenues_code ?? ''); }, [album.id]);
 
-  const dirty = title !== album.title || date !== album.event_date || description !== (album.description ?? '') || code !== (album.fourvenues_code ?? '');
+  const dirty = title !== (album.title ?? '') || date !== album.event_date || description !== (album.description ?? '') || code !== (album.fourvenues_code ?? '');
   const until = screen && new Date(new Date(`${album.event_date}T12:00:00`).getTime() + screen.max_days * 86_400_000).toISOString().slice(0, 10);
 
   const screenNote: ReactNode =
@@ -368,7 +367,9 @@ function AlbumSettings({ album, onScreens, screen, onSave, onDelete }: {
     <div className="grid gap-4">
       <section className="panel grid gap-4 p-5">
         <h2 className="label">Details</h2>
-        <Field label="Name">{(id) => <Input id={id} value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} />}</Field>
+        <Field label="Title" hint={date ? `Optional. Without a title, the album is called ${longDate(date)}.` : 'Optional.'}>
+          {(id) => <Input id={id} value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} />}
+        </Field>
         <Field label="Date">{(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} />}</Field>
         <Field label="Description" hint="Optional. Shown above the photos on the website.">
           {(id) => <Textarea id={id} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />}
@@ -379,8 +380,8 @@ function AlbumSettings({ album, onScreens, screen, onSave, onDelete }: {
         {dirty && (
           <Button
             variant="primary"
-            onClick={() => onSave({ title: title.trim(), event_date: date, description: description.trim() || null, fourvenues_code: code || null }, 'Saved')}
-            disabled={!title.trim() || !date}
+            onClick={() => onSave({ title: title.trim() || null, event_date: date, description: description.trim() || null, fourvenues_code: code || null }, 'Saved')}
+            disabled={!date}
           >
             Save changes
           </Button>

@@ -9,6 +9,7 @@ import { Today } from '@/pages/Today';
 import { Albums } from '@/pages/Albums';
 import { AlbumEditor } from '@/pages/AlbumEditor';
 import { Promos } from '@/pages/Promos';
+import { SpecialEvents } from '@/pages/SpecialEvents';
 import { Screens } from '@/pages/Screens';
 import { ScreenDetail } from '@/pages/ScreenDetail';
 import { Visitors } from '@/pages/Visitors';
@@ -47,6 +48,7 @@ export default function Admin() {
             <Route path="time-off" element={<Only area="staff"><TimeOff /></Only>} />
             <Route path="albums" element={<Only area="media"><Albums /></Only>} />
             <Route path="albums/:id" element={<Only area="media"><AlbumEditor /></Only>} />
+            <Route path="special-events" element={<Only area="media"><SpecialEvents /></Only>} />
             <Route path="promos" element={<Only area="media"><Promos /></Only>} />
             <Route path="screens" element={<Only area="media"><Screens /></Only>} />
             <Route path="screens/:id" element={<Only area="media"><ScreenDetail /></Only>} />

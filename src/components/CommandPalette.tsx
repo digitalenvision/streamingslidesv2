@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { can } from '@/lib/access';
 import { listEmployees } from '@/lib/staff';
 import { listAlbums } from '@/lib/data';
-import { arubaToday, cn, formatDate } from '@/lib/format';
+import { albumName, arubaToday, cn, formatDate } from '@/lib/format';
 import { weekStart } from '@/lib/schedule';
 import { navGroups, Avatar } from './AppShell';
 import type { Album, Employee } from '@/types';
@@ -61,7 +61,7 @@ export function CommandPalette({ open, hide }: { open: boolean; hide: () => void
       id: `e-${p.id}`, label: p.name, hint: [p.job_title, !p.active && 'inactive'].filter(Boolean).join(' · '), group: 'People', avatar: p.name, to: `/people?id=${p.id}`,
     }));
     const alb: Item[] = albums.slice(0, 200).map((a) => ({
-      id: `al-${a.id}`, label: a.title, hint: formatDate(a.event_date, { month: 'short', day: 'numeric', year: 'numeric' }), group: 'Albums', icon: Images, to: `/albums/${a.id}`,
+      id: `al-${a.id}`, label: albumName(a), hint: formatDate(a.event_date, { month: 'short', day: 'numeric', year: 'numeric' }), group: 'Albums', icon: Images, to: `/albums/${a.id}`,
     }));
     const q = query.trim().toLowerCase();
     if (!q) return [...actions, ...pages];

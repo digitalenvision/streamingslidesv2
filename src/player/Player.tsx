@@ -9,7 +9,6 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { screenChannel, type Command, type PlayerStatus } from '@/lib/remote';
-import { formatDate } from '@/lib/format';
 import { publicUrl } from '@/lib/media';
 import { Logo, Mark } from '@/components/ui';
 import type { Playlist, Transition } from '@/types';
@@ -39,7 +38,8 @@ function preload(slide: Slide): Promise<boolean> {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.src = slide.src;
-    p = img.decode().then(() => true, () => false);
+    // A failed load may be temporary, so the next pass asks again.
+    p = img.decode().then(() => true, () => { ready.delete(slide.src); return false; });
     ready.set(slide.src, p);
     if (ready.size > 40) ready.delete(ready.keys().next().value!);
   }
@@ -290,7 +290,7 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
               <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/70 to-transparent px-[3vw] pb-[2.6vw] pt-[8vw]">
                 <div className="grid gap-[.3vw]">
                   <span className="font-display text-[2.1vw] font-bold leading-none tracking-tight text-white">{slide.album}</span>
-                  <span className="text-[1.05vw] font-medium uppercase tracking-[.2em] text-gold">{formatDate(slide.date, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+                  {slide.date && <span className="text-[1.05vw] font-medium uppercase tracking-[.2em] text-gold">{slide.date}</span>}
                 </div>
                 <Mark className="h-[3.2vw] opacity-90" />
               </div>
