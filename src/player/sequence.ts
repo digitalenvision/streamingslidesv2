@@ -17,7 +17,44 @@ const shuffle = <T,>(list: T[]) => {
   return a;
 };
 
-export function buildSequence(playlist: Playlist): Slide[] {
+// The shuffled order stays put when the playlist changes, so a change doesn't bring photos
+// back early. Photos from a just-published album play right after the last photo shown;
+// any other new photo lands somewhere in what's still to come.
+function keepOrder<T extends { key: string }>(photos: T[], previous: string[], lastPhoto: string | null, fresh: Set<string>) {
+  const byKey = new Map(photos.map((p) => [p.key, p]));
+  const seen = new Set(previous);
+  const added = photos.filter((p) => !seen.has(p.key));
+  const order = previous.flatMap((key) => byKey.get(key) ?? []);
+  const at = previous.slice(0, lastPhoto ? previous.indexOf(lastPhoto) + 1 : 0).filter((key) => byKey.has(key)).length;
+  for (const photo of shuffle(added.filter((p) => !fresh.has(p.key)))) {
+    order.splice(at + Math.floor(Math.random() * (order.length - at + 1)), 0, photo);
+  }
+  order.splice(at, 0, ...added.filter((p) => fresh.has(p.key)));
+  return order;
+}
+
+const freshKeys = (playlist: Playlist) =>
+  playlist.albums.filter((a) => a.fresh).flatMap((a) => a.photos.map((p) => `photo:${p.id}`));
+
+// The photo to play next after a playlist change: the first one just arrived in a
+// just-published album. Nothing on the first load, which simply starts with them.
+export function firstArrival(playlist: Playlist, previous: Slide[]) {
+  if (!previous.length) return null;
+  const seen = new Set(previous.map((s) => s.key));
+  return freshKeys(playlist).find((key) => !seen.has(key)) ?? null;
+}
+
+// Where the slide on screen sits in a new list, or -1 if it's gone. A promo comes round
+// many times, so it's the one after the last photo shown.
+export function locate(slides: Slide[], shown: string | null, lastPhoto: string | null) {
+  if (!shown?.startsWith('promo:')) return slides.findIndex((s) => s.key === shown);
+  if (!slides.some((s) => s.key === shown)) return -1;
+  const anchor = slides.findIndex((s) => s.key === lastPhoto);
+  const at = slides.findIndex((s, i) => i > anchor && s.key === shown);
+  return at >= 0 ? at : anchor;
+}
+
+export function buildSequence(playlist: Playlist, previous: Slide[] = [], lastPhoto: string | null = null): Slide[] {
   const { screen } = playlist;
   const photos = playlist.albums.flatMap((album) =>
     album.photos.map((p) => ({
@@ -34,7 +71,9 @@ export function buildSequence(playlist: Playlist): Slide[] {
       seconds: Number(screen.photo_seconds),
     })),
   );
-  const ordered = screen.shuffle ? shuffle(photos) : photos;
+  const ordered = screen.shuffle
+    ? keepOrder(photos, previous.flatMap((s) => (s.kind === 'photo' ? s.key : [])), lastPhoto, new Set(freshKeys(playlist)))
+    : photos;
 
   const promos = playlist.promos.map((p) => ({
     slide: { key: `promo:${p.id}`, kind: 'promo' as const, src: publicUrl(p.path), promoKind: p.kind, title: p.title, seconds: p.duration_seconds, w: p.w, h: p.h },

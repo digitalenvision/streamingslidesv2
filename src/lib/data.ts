@@ -29,15 +29,22 @@ export const saveEventSetting = async (event: UpcomingEvent, setting: EventSetti
 };
 
 // The website caches its pages for a few minutes: this makes it drop the ones showing nights.
-export async function refreshWebsiteNights() {
+async function refreshWebsite(path: string) {
   const { data } = await supabase.auth.getSession();
-  const res = await fetch(`${WEBSITE}/api/events/settings-changed/`, {
+  const res = await fetch(`${WEBSITE}${path}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${data.session?.access_token}`, 'Content-Type': 'application/json' },
     body: '{}',
   });
   if (!res.ok) throw new Error('The website didn’t refresh');
 }
+
+export const refreshWebsiteNights = () => refreshWebsite('/api/events/settings-changed/');
+
+// The photos are already gone by now, and the cached pages expire by themselves, so a
+// failure here isn't worth stopping for.
+const refreshWebsiteGallery = () =>
+  refreshWebsite('/api/gallery/changed/').catch((err) => console.warn('[gallery] website refresh failed', err));
 
 // --- albums ---------------------------------------------------------------------
 export const listAlbums = async () =>
@@ -51,10 +58,21 @@ export const createAlbum = async (input: Pick<Album, 'title' | 'event_date' | 's
 export const updateAlbum = async (id: string, patch: Partial<Album>) =>
   ok(await supabase.from('event_albums').update(patch).eq('id', id).select().single()) as Album;
 
+// One request returns a limited number of rows, so this keeps asking until none come back.
+async function listAllPhotoFiles(albumId: string) {
+  const photos: Pick<Photo, 'id' | 'album_id' | 'format'>[] = [];
+  for (;;) {
+    const page = ok(await supabase.from('event_photos').select('id,album_id,format').eq('album_id', albumId).order('id').range(photos.length, photos.length + 999)) as typeof photos;
+    if (!page.length) return photos;
+    photos.push(...page);
+  }
+}
+
 export async function deleteAlbum(album: Album) {
-  const photos = await listPhotos(album.id);
+  const photos = await listAllPhotoFiles(album.id);
   await removePhotoFiles(photos);
   ok(await supabase.from('event_albums').delete().eq('id', album.id));
+  await refreshWebsiteGallery();
 }
 
 // --- photos ---------------------------------------------------------------------
@@ -67,6 +85,7 @@ export const updatePhotos = async (ids: string[], patch: Partial<Pick<Photo, 'hi
 export async function deletePhotos(photos: Photo[]) {
   await removePhotoFiles(photos);
   ok(await supabase.from('event_photos').delete().in('id', photos.map((p) => p.id)));
+  await refreshWebsiteGallery();
 }
 
 export const reorderPhotos = async (albumId: string, ids: string[]) =>

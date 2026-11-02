@@ -18,6 +18,7 @@ export interface UploadTask {
 }
 
 const CONCURRENCY = 3;
+const REMOVE_BATCH = 500;
 export const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
 
 // --- worker pool ---------------------------------------------------------------
@@ -75,13 +76,28 @@ async function put(bucket: string, path: string, blob: Blob) {
   }
 }
 
+// Storage caps the paths in one delete request, and answers bursts with a 429. Removing a
+// file that's already gone isn't an error, so trying a failed delete again is safe.
+async function removeFiles(bucket: string, paths: string[]) {
+  for (let i = 0; i < paths.length; i += REMOVE_BATCH) {
+    const batch = paths.slice(i, i + REMOVE_BATCH);
+    for (let attempt = 1; ; attempt++) {
+      const { error } = await supabase.storage.from(bucket).remove(batch);
+      if (!error) break;
+      if (attempt === 3) throw new Error(`Some files couldn’t be deleted from storage, please try again (${error.message})`);
+      await new Promise((r) => setTimeout(r, attempt * 1500));
+    }
+  }
+}
+
+// Throws if any file stays behind, so callers keep the database row and can try again.
 export async function removePhotoFiles(photos: Pick<Photo, 'id' | 'album_id' | 'format'>[]) {
   if (!photos.length) return;
   const previews = photos.flatMap((p) => RENDITIONS.map((s) => renditionPath(p.album_id, p.id, s, p.format)));
   const originals = photos.map((p) => originalPath(p.album_id, p.id));
   await Promise.all([
-    supabase.storage.from(GALLERY_BUCKET).remove(previews),
-    supabase.storage.from(ORIGINALS_BUCKET).remove(originals),
+    removeFiles(GALLERY_BUCKET, previews),
+    removeFiles(ORIGINALS_BUCKET, originals),
   ]);
 }
 

@@ -117,7 +117,7 @@ export interface RemovalRequest {
 /** What `screen_playlist(screen_id)` returns. */
 export interface Playlist {
   screen: Omit<Screen, 'updated_at'>;
-  albums: { id: string; title: string | null; event_date: string; photos: { id: string; w: number; h: number; f: ImageFormat }[] }[];
+  albums: { id: string; title: string | null; event_date: string; fresh?: boolean; photos: { id: string; w: number; h: number; f: ImageFormat }[] }[];
   promos: { id: string; title: string; kind: 'image' | 'video'; path: string; w: number | null; h: number | null; duration_seconds: number; every_n: number }[];
 }
 

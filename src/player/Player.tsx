@@ -5,20 +5,21 @@
 // Why it's fast: it plays the 1920px versions (~250 KB instead of multi-MB camera
 // files), starts as soon as the first photo is decoded, keeps the next few photos
 // decoded in the background, and the service worker keeps played photos on the TV.
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { screenChannel, type Command, type PlayerStatus } from '@/lib/remote';
 import { publicUrl } from '@/lib/media';
 import { Logo, Mark } from '@/components/ui';
 import type { Playlist, Transition } from '@/types';
-import { buildSequence, type Slide } from './sequence';
+import { buildSequence, firstArrival, locate, type Slide } from './sequence';
 
 const LegacyPreview = lazy(() => import('@/legacy/SlideshowPreview').then((m) => ({ default: m.SlideshowPreview })));
 
 const AHEAD = 4;
 const READY_TIMEOUT = 10_000;
-const REFRESH_DEBOUNCE = 8_000;
+const REFRESH_DEBOUNCE = 2_000;
+const REFRESH_MAX_WAIT = 10_000;
 const POLL_MS = 5 * 60_000;
 const STATUS_MS = 10_000;
 const playerId = (() => {
@@ -84,7 +85,7 @@ export function Player() {
 
 function Show({ id, initial }: { id: string; initial: Playlist }) {
   const [playlist, setPlaylist] = useState(initial);
-  const slides = useMemo(() => buildSequence(playlist), [playlist]);
+  const [slides, setSlides] = useState(() => buildSequence(initial));
   const [index, setIndex] = useState(0);
   const [layers, setLayers] = useState<{ slide: Slide; n: number }[]>([]);
   const [playing, setPlaying] = useState(true);
@@ -97,12 +98,14 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
   const background = screen.background_path ? publicUrl(screen.background_path) : null;
   const counter = useRef(0);
   const advancing = useRef(false);
-  const state = useRef({ index, slides, playing, black });
-  state.current = { index, slides, playing, black };
+  const state = useRef({ index, slides, playing, black, playlist });
+  state.current = { index, slides, playing, black, playlist };
 
   // Show a slide once it's decoded (skipping ones that fail to load).
   // The slide on screen right now (state.current.slides is already the new list after a refresh).
   const shown = useRef<string | null>(null);
+  const lastPhoto = useRef<string | null>(null);
+  const playNext = useRef<string | null>(null);
   const goTo = useCallback(async (target: number, step = 1) => {
     const list = state.current.slides;
     if (!list.length || advancing.current) return;
@@ -113,6 +116,7 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
         if (await preload(list[i])) {
           setIndex(i);
           shown.current = list[i].key;
+          if (list[i].kind === 'photo') lastPhoto.current = list[i].key;
           setLayers((prev) => [...prev.slice(-1), { slide: list[i], n: ++counter.current }]);
           setStarted(true);
           return;
@@ -162,11 +166,24 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
   const refresh = useCallback(async () => {
     const fresh = await fetchPlaylist(id);
     if (!fresh || fresh === 'offline') return;
-    setPlaylist((old) => (JSON.stringify(old) === JSON.stringify(fresh) ? old : fresh));
+    const { playlist: old, slides: list } = state.current;
+    if (JSON.stringify(old) === JSON.stringify(fresh)) return;
+    // Turning shuffle on or off starts a new order; anything else keeps the current one.
+    const previous = old.screen.shuffle === fresh.screen.shuffle ? list : [];
+    playNext.current = firstArrival(fresh, previous);
+    setPlaylist(fresh);
+    setSlides(buildSequence(fresh, previous, lastPhoto.current));
   }, [id]);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const soon = () => { clearTimeout(timer); timer = setTimeout(refresh, REFRESH_DEBOUNCE); };
+    // Changes that keep coming (an upload in progress) still refresh every so often.
+    let waitingSince: number | null = null;
+    const run = () => { waitingSince = null; refresh(); };
+    const soon = () => {
+      clearTimeout(timer);
+      waitingSince ??= Date.now();
+      timer = setTimeout(run, Math.min(REFRESH_DEBOUNCE, waitingSince + REFRESH_MAX_WAIT - Date.now()));
+    };
     const ch = supabase
       .channel(`screen-row:${screen.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'screens', filter: `id=eq.${screen.id}` }, soon)
@@ -179,11 +196,14 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
   const firstRun = useRef(true);
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; }
-    const at = slides.findIndex((s) => s.key === shown.current);
+    const at = locate(slides, shown.current, lastPhoto.current);
+    // A just-published album comes next: its first photo follows the slide on screen.
+    const arrival = slides.findIndex((s) => s.key === playNext.current);
+    playNext.current = null;
     // A slide that's gone (photo removed) leaves the screen right away; carry on from there.
     const from = Math.min(state.current.index, Math.max(0, slides.length - 1));
-    setIndex(at >= 0 ? at : from);
-    if (at < 0) goTo(from);
+    setIndex(at < 0 ? from : arrival >= 0 ? (arrival - 1 + slides.length) % slides.length : at);
+    if (at < 0) goTo(arrival >= 0 ? arrival : from);
     // Tell the service worker which photos to keep on the TV.
     navigator.serviceWorker?.controller?.postMessage({ type: 'keep', urls: slides.filter((s) => s.kind === 'photo').map((s) => s.src) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
