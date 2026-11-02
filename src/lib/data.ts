@@ -28,6 +28,17 @@ export const saveEventSetting = async (event: UpcomingEvent, setting: EventSetti
   ok(await supabase.from('event_settings').upsert({ ...setting, name: event.name, starts_at: event.start }, { onConflict: 'code' }));
 };
 
+// The website caches its pages for a few minutes: this makes it drop the ones showing nights.
+export async function refreshWebsiteNights() {
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch(`${WEBSITE}/api/events/settings-changed/`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${data.session?.access_token}`, 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!res.ok) throw new Error('The website didn’t refresh');
+}
+
 // --- albums ---------------------------------------------------------------------
 export const listAlbums = async () =>
   ok(await supabase.from('event_albums').select('*').order('event_date', { ascending: false }).order('created_at', { ascending: false })) as Album[];

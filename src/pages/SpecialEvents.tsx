@@ -5,7 +5,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { CalendarX2, RotateCw, Search, Star, X } from 'lucide-react';
 import { PageHeader } from '@/components/AppShell';
 import { Badge, Button, Empty, IconButton, Input, Spinner, Switch, useToast } from '@/components/ui';
-import { listEventSettings, listUpcomingEvents, saveEventSetting } from '@/lib/data';
+import { listEventSettings, listUpcomingEvents, refreshWebsiteNights, saveEventSetting } from '@/lib/data';
 import { cn } from '@/lib/format';
 import { useLoad } from '@/lib/useLoad';
 import type { EventSetting, UpcomingEvent } from '@/types';
@@ -51,14 +51,16 @@ export function SpecialEvents() {
     } catch (err) {
       set((d) => d && { ...d, settings: before });
       toast(err instanceof Error ? err.message : 'Could not save that', 'bad');
+      return;
     }
+    await refreshWebsiteNights().catch(() => toast('Saved, but the website may take up to 5 minutes to show it', 'bad'));
   };
 
   return (
     <>
       <PageHeader
         title="Special events"
-        subtitle="Feature up to 3 nights on the homepage and the VIP tables page, so people can book them right away. Changes reach the website within about 5 minutes."
+        subtitle="Feature up to 3 nights on the homepage and the VIP tables page, so people can book them right away. Changes show on the website immediately."
       />
 
       {!data ? (
