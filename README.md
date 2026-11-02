@@ -78,7 +78,8 @@ Local test owner (from `supabase/seed.sql`): `admin@gusto.test`. 2FA is set up a
 5. **Switch the TV**: Screens → Main screens → Existing TV link → pick the old slideshow. The TV changes over by itself, with nothing to touch on the computer.
 6. **Website**: set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` and `GALLERY_COOKIE_SECRET` on the gustoaruba.com project.
 7. **Removal requests**: `20261028090000_removal_requests.sql` (in the same `db push`) and the updated website (`gusto-web`: `src/lib/gallery.ts`, `src/pages/api/gallery/*`, `src/pages/gallery/[slug].astro`) go live together. Only visitors who unlocked the gallery can ask, always with a reason; requests land under Media → Removal requests, and approving deletes the photo from the album, the website and the screens. The album page is CDN-cached for up to 5 minutes, so a removed photo can linger there that long (its tile drops out once the image is gone).
-8. Once everything is checked, ImageKit and the old `imagekit-auth` / `imagekit-delete` edge functions can be retired.
+8. **Screen look**: `20261101120000_screen_look.sql` adds a screen's background image, space around the photos and fade length (Screens → pick a screen). Apply it before deploying the player that reads them.
+9. Once everything is checked, ImageKit and the old `imagekit-auth` / `imagekit-delete` edge functions can be retired.
 
 ## Moving photos off ImageKit
 

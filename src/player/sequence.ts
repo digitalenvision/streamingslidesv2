@@ -5,7 +5,7 @@ import type { Playlist } from '@/types';
 
 export type Slide =
   | { key: string; kind: 'photo'; src: string; thumb: string; backdrop: string; w: number; h: number; album: string; date: string; seconds: number }
-  | { key: string; kind: 'promo'; src: string; promoKind: 'image' | 'video'; title: string; seconds: number };
+  | { key: string; kind: 'promo'; src: string; promoKind: 'image' | 'video'; title: string; seconds: number; w: number | null; h: number | null };
 
 const shuffle = <T,>(list: T[]) => {
   const a = [...list];
@@ -35,7 +35,7 @@ export function buildSequence(playlist: Playlist): Slide[] {
   const ordered = screen.shuffle ? shuffle(photos) : photos;
 
   const promos = playlist.promos.map((p) => ({
-    slide: { key: `promo:${p.id}`, kind: 'promo' as const, src: publicUrl(p.path), promoKind: p.kind, title: p.title, seconds: p.duration_seconds },
+    slide: { key: `promo:${p.id}`, kind: 'promo' as const, src: publicUrl(p.path), promoKind: p.kind, title: p.title, seconds: p.duration_seconds, w: p.w, h: p.h },
     every: p.every_n,
     count: 0,
   }));

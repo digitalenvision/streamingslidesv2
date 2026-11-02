@@ -10,6 +10,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { screenChannel, type Command, type PlayerStatus } from '@/lib/remote';
 import { formatDate } from '@/lib/format';
+import { publicUrl } from '@/lib/media';
 import { Logo, Mark } from '@/components/ui';
 import type { Playlist, Transition } from '@/types';
 import { buildSequence, type Slide } from './sequence';
@@ -91,6 +92,9 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
   const [started, setStarted] = useState(false);
   const screen = playlist.screen;
   const transition: Transition = screen.transition;
+  const transitionSeconds = Number(screen.transition_seconds);
+  const margin = Number(screen.margin_percent);
+  const background = screen.background_path ? publicUrl(screen.background_path) : null;
   const counter = useRef(0);
   const advancing = useRef(false);
   const state = useRef({ index, slides, playing, black });
@@ -122,8 +126,14 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
   const next = useCallback(() => goTo(state.current.index + 1), [goTo]);
   const previous = useCallback(() => goTo(state.current.index - 1, -1), [goTo]);
 
-  // First slide.
-  useEffect(() => { goTo(0); }, [goTo]);
+  // First slide, once the background is there to show it on.
+  useEffect(() => {
+    if (!background) { goTo(0); return; }
+    const img = new Image();
+    img.src = background;
+    img.decode().catch(() => {}).finally(() => goTo(0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goTo]);
 
   // Keep the next few slides decoded.
   useEffect(() => {
@@ -144,9 +154,9 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
   // Drop the layer underneath once the new one has finished coming in.
   useEffect(() => {
     if (layers.length < 2) return;
-    const t = setTimeout(() => setLayers((prev) => prev.slice(-1)), 1400);
+    const t = setTimeout(() => setLayers((prev) => prev.slice(-1)), Math.max(1400, transitionSeconds * 1000 + 200));
     return () => clearTimeout(t);
-  }, [layers]);
+  }, [layers, transitionSeconds]);
 
   // Playlist changes: Realtime on the screen row, plus a slow poll as a safety net.
   const refresh = useCallback(async () => {
@@ -255,33 +265,39 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
     <div
       className={`player fixed inset-0 overflow-hidden bg-black ${cursor ? '' : 'cursor-none'}`}
       data-transition={transition}
+      style={{
+        ['--transition' as string]: `${transitionSeconds}s`,
+        ...(background && { backgroundImage: `url(${background})`, backgroundSize: 'cover', backgroundPosition: 'center' }),
+      }}
       onDoubleClick={() => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {}))}
     >
-      {layers.map(({ slide, n }) => (
-        <div key={n} className="player-layer absolute inset-0" style={{ ['--secs' as string]: `${slide.seconds}s` }}>
-          {slide.kind === 'photo' ? (
-            <>
-              {slide.h > slide.w * 0.8 && (
-                <img src={slide.backdrop} crossOrigin="anonymous" alt="" className="absolute inset-0 size-full scale-110 object-cover opacity-60 blur-3xl" />
+      <div className="absolute inset-0">
+        {layers.map(({ slide, n }) => (
+          <div key={n} className="player-layer absolute inset-0" style={{ ['--secs' as string]: `${slide.seconds}s` }}>
+            {slide.kind === 'photo' && !background && slide.h > slide.w * 0.8 && (
+              <img src={slide.backdrop} crossOrigin="anonymous" alt="" className="absolute inset-0 size-full scale-110 object-cover opacity-60 blur-3xl" />
+            )}
+            <div className="absolute flex items-center justify-center" style={{ inset: `${margin}%` }}>
+              {slide.kind === 'photo' ? (
+                <img src={slide.src} crossOrigin="anonymous" alt="" className="player-photo max-h-full max-w-full object-contain" style={{ width: slide.w, height: slide.h }} />
+              ) : slide.promoKind === 'video' ? (
+                <video src={slide.src} autoPlay muted playsInline className="size-full object-contain" onEnded={next} onError={next} />
+              ) : (
+                <img src={slide.src} alt="" className="max-h-full max-w-full object-contain" style={slide.w && slide.h ? { width: slide.w, height: slide.h } : undefined} />
               )}
-              <img src={slide.src} crossOrigin="anonymous" alt="" className="player-photo absolute inset-0 size-full object-contain" />
-              {screen.show_album_titles && (
-                <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/70 to-transparent px-[3vw] pb-[2.6vw] pt-[8vw]">
-                  <div className="grid gap-[.3vw]">
-                    <span className="font-display text-[2.1vw] font-bold leading-none tracking-tight text-white">{slide.album}</span>
-                    <span className="text-[1.05vw] font-medium uppercase tracking-[.2em] text-gold">{formatDate(slide.date, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
-                  </div>
-                  <Mark className="h-[3.2vw] opacity-90" />
+            </div>
+            {slide.kind === 'photo' && screen.show_album_titles && (
+              <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/70 to-transparent px-[3vw] pb-[2.6vw] pt-[8vw]">
+                <div className="grid gap-[.3vw]">
+                  <span className="font-display text-[2.1vw] font-bold leading-none tracking-tight text-white">{slide.album}</span>
+                  <span className="text-[1.05vw] font-medium uppercase tracking-[.2em] text-gold">{formatDate(slide.date, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
                 </div>
-              )}
-            </>
-          ) : slide.promoKind === 'video' ? (
-            <video src={slide.src} autoPlay muted playsInline className="absolute inset-0 size-full object-contain" onEnded={next} onError={next} />
-          ) : (
-            <img src={slide.src} alt="" className="absolute inset-0 size-full object-contain" />
-          )}
-        </div>
-      ))}
+                <Mark className="h-[3.2vw] opacity-90" />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
       {!started && <Idle />}
       <div className={`pointer-events-none absolute inset-0 z-10 bg-black transition-opacity duration-700 ${black ? 'opacity-100' : 'opacity-0'}`} />
     </div>

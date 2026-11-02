@@ -104,6 +104,16 @@ export const updateScreen = async (id: string, patch: Partial<Screen>) =>
   ok(await supabase.from('screens').update(patch).eq('id', id).select().single()) as Screen;
 export const deleteScreen = async (id: string) => ok(await supabase.from('screens').delete().eq('id', id));
 
+/** Stores a new background image and returns its path. Paths are immutable, like every other file. */
+export async function uploadScreenBackground(screenId: string, file: File) {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const path = `backgrounds/${screenId}/${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from(GALLERY_BUCKET).upload(path, file, { cacheControl: CACHE_SECONDS, contentType: file.type });
+  if (error) throw new Error(error.message);
+  return path;
+}
+export const removeScreenBackground = async (path: string) => { await supabase.storage.from(GALLERY_BUCKET).remove([path]); };
+
 // --- visitors & removal requests ------------------------------------------------
 export const listVisitors = async () =>
   ok(await supabase.from('gallery_visitors').select('*').order('created_at', { ascending: false }).limit(5000)) as Visitor[];

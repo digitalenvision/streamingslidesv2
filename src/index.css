@@ -78,14 +78,21 @@
 
 /* TV player transitions: only the incoming layer animates, over the previous one. */
 @layer components {
-  .player[data-transition='fade'] .player-layer:last-child { animation: player-fade 0.9s ease both; }
+  .player[data-transition='fade'] .player-layer:last-child { animation: player-fade var(--transition, 0.8s) ease-in-out both; }
+  .player[data-transition='fade'] .player-layer:not(:last-child) { animation: player-fade-out var(--transition, 0.8s) ease-in-out both; }
+  .player[data-transition='zoom'] .player-layer:not(:last-child) { animation: player-fade-out 1s ease both; }
+  .player[data-transition='slide'] .player-layer:not(:last-child) { animation: player-slide-out 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .player[data-transition='none'] .player-layer:not(:last-child) { visibility: hidden; }
   .player[data-transition='slide'] .player-layer:last-child { animation: player-slide 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
   .player[data-transition='zoom'] .player-layer:last-child { animation: player-fade 1s ease both; }
   .player[data-transition='zoom'] .player-photo { animation: player-kenburns var(--secs) linear both; }
   @keyframes player-fade { from { opacity: 0; } }
+  @keyframes player-fade-out { to { opacity: 0; } }
   @keyframes player-slide { from { transform: translateX(100%); } }
+  @keyframes player-slide-out { to { transform: translateX(-100%); } }
   @keyframes player-kenburns { from { transform: scale(1); } to { transform: scale(1.06); } }
   @media (prefers-reduced-motion: reduce) {
-    .player .player-layer:last-child, .player .player-photo { animation: none !important; }
+    .player .player-layer, .player .player-photo { animation: none !important; }
+    .player .player-layer:not(:last-child) { visibility: hidden; }
   }
 }

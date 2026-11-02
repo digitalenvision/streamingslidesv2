@@ -62,6 +62,9 @@ export interface Screen {
   max_days: number;
   photo_seconds: number;
   transition: Transition;
+  transition_seconds: number;
+  margin_percent: number;
+  background_path: string | null;
   shuffle: boolean;
   show_album_titles: boolean;
   legacy_slideshow_id: string | null;

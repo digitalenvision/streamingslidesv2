@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Copy, ExternalLink, Monitor, MonitorOff, Pause, Play, RotateCw, SkipBack, SkipForward, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/AppShell';
 import { playerAddress } from './Screens';
 import { Badge, Button, Field, IconButton, Input, Segmented, Spinner, Switch, useConfirm, useToast } from '@/components/ui';
-import { deleteScreen, getScreen, listScreens, updateScreen } from '@/lib/data';
+import { deleteScreen, getScreen, listScreens, removeScreenBackground, updateScreen, uploadScreenBackground } from '@/lib/data';
 import { formatDate, plural } from '@/lib/format';
+import { publicUrl } from '@/lib/media';
 import { supabase } from '@/lib/supabase';
 import { useLoad } from '@/lib/useLoad';
 import { useRemote } from '@/lib/useRemote';
@@ -25,6 +26,7 @@ export function ScreenDetail() {
   const { players, send } = useRemote(id);
   const [draft, setDraft] = useState<Partial<Screen>>({});
   useEffect(() => setDraft({}), [id]);
+  const backgroundInput = useRef<HTMLInputElement>(null);
 
   if (loading && !screen) return <div className="grid place-items-center py-24"><Spinner /></div>;
   if (!screen) return null;
@@ -45,6 +47,23 @@ export function ScreenDetail() {
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Could not save', 'bad');
     }
+  };
+
+  const setBackground = async (file: File | undefined) => {
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return toast('Use a JPG, PNG or WebP image', 'bad');
+    try {
+      const path = await uploadScreenBackground(screen.id, file);
+      await save({ background_path: path }, 'Background saved');
+      if (screen.background_path) await removeScreenBackground(screen.background_path);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not upload', 'bad');
+    }
+  };
+  const clearBackground = async () => {
+    const old = screen.background_path;
+    await save({ background_path: null }, 'Background removed');
+    if (old) await removeScreenBackground(old);
   };
 
   return (
@@ -150,6 +169,33 @@ export function ScreenDetail() {
                 className="w-full"
                 options={[{ value: 'fade', label: 'Fade' }, { value: 'slide', label: 'Slide' }, { value: 'zoom', label: 'Zoom' }, { value: 'none', label: 'Cut' }]}
               />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Fade length">
+                {(fid) => (
+                  <div className="relative">
+                    <Input id={fid} type="number" min={0.2} max={3} step={0.1} disabled={value.transition !== 'fade'} value={value.transition_seconds} onChange={(e) => setDraft({ ...draft, transition_seconds: Number(e.target.value) })} className="pr-12" />
+                    <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-mute">sec</span>
+                  </div>
+                )}
+              </Field>
+              <Field label="Space around photos">
+                {(fid) => (
+                  <div className="relative">
+                    <Input id={fid} type="number" min={0} max={20} step={0.5} value={value.margin_percent} onChange={(e) => setDraft({ ...draft, margin_percent: Number(e.target.value) })} className="pr-12" />
+                    <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-mute">%</span>
+                  </div>
+                )}
+              </Field>
+            </div>
+            <div className="grid gap-1.5">
+              <span className="text-[13px] font-medium text-white/85">Background image</span>
+              {value.background_path && <img src={publicUrl(value.background_path)} alt="" className="aspect-video w-full rounded-xl object-cover" />}
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => backgroundInput.current?.click()}>{value.background_path ? 'Replace' : 'Add image'}</Button>
+                {value.background_path && <Button variant="ghost" onClick={clearBackground}>Remove</Button>}
+              </div>
+              <input ref={backgroundInput} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => { setBackground(e.target.files?.[0]); e.target.value = ''; }} />
             </div>
             <Switch label="Shuffle photos" description="Mix photos from all albums instead of playing night by night." checked={value.shuffle} onChange={(v) => setDraft({ ...draft, shuffle: v })} />
             <Switch label="Show album names" description="Name and date of the night in the corner." checked={value.show_album_titles} onChange={(v) => setDraft({ ...draft, show_album_titles: v })} />
