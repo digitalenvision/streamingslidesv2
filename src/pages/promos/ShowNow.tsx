@@ -1,8 +1,8 @@
 // "Show now": put one slide on the screens straight away for a few minutes (closing time,
 // a birthday shout-out), then the photos carry on where they left off.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Film, Radio, Square } from 'lucide-react';
-import { Button, Dialog } from '@/components/ui';
+import { Button, Dialog, Input } from '@/components/ui';
 import { cn } from '@/lib/format';
 import { publicUrl } from '@/lib/media';
 import { endOfNight, isLive, liveUntil, takeoverEnd } from '@/lib/slides';
@@ -15,8 +15,11 @@ const LENGTHS = [
   { label: '15 min', minutes: 15 },
   { label: '30 min', minutes: 30 },
   { label: '1 hour', minutes: 60 },
-  { label: 'Rest of the night', minutes: null },
 ] as const;
+
+/** What's picked: a number of minutes, the rest of the night, or a length typed in. */
+type Length = number | 'night' | 'custom';
+const MAX_SECONDS = 12 * 3600;
 
 /** Ticks once a second while something is counting down. */
 export function useNow(active = true, every = 1000) {
@@ -61,12 +64,22 @@ export function SlideThumb({ promo, photos, className, still = true, until = nul
 export function ShowNowDialog({ promo, screens, photos, onClose, onSave }: {
   promo: Promo | null; screens: Screen[]; photos: string[]; onClose: () => void; onSave: (p: Promo, liveUntil: string | null) => Promise<void>;
 }) {
-  const [minutes, setMinutes] = useState<number | null>(10);
+  const [length, setLength] = useState<Length>(10);
+  const [mins, setMins] = useState('2');
+  const [secs, setSecs] = useState('30');
   const [busy, setBusy] = useState(false);
   const live = !!promo && isLive(promo);
   const now = useNow(live);
-  useEffect(() => { if (promo) setMinutes(10); }, [promo]);
+  useEffect(() => { if (promo) setLength(10); }, [promo]);
   if (!promo) return null;
+
+  const typed = (Number(mins) || 0) * 60 + (Number(secs) || 0);
+  const typedProblem = length !== 'custom' ? null
+    : typed < 5 ? 'At least 5 seconds.'
+    : typed > MAX_SECONDS ? 'At most 12 hours. For longer, pick Rest of the night.'
+    : null;
+  /** How long it stays up, in ms; null = rest of the night. */
+  const lengthMs = length === 'night' ? null : length === 'custom' ? Math.min(Math.max(typed, 5), MAX_SECONDS) * 1000 : length * 60_000;
 
   const go = async (until: string | null) => {
     setBusy(true);
@@ -77,13 +90,13 @@ export function ShowNowDialog({ promo, screens, photos, onClose, onSave }: {
       setBusy(false);
     }
   };
-  const untilFor = (m: number | null, from = Date.now()) => new Date(m == null ? endOfNight() : from + m * 60_000).toISOString();
+  const untilFor = (ms: number | null, from = Date.now()) => new Date(ms == null ? endOfNight() : from + ms).toISOString();
 
   return (
     <Dialog open onClose={onClose} title={live ? 'On the screens now' : 'Show now'}>
       <div className="grid gap-5">
         <div className="overflow-hidden rounded-xl border border-line">
-          <SlideThumb promo={promo} photos={photos} still={false} until={live ? liveUntil(promo, now) : Date.now() + (minutes ?? 10) * 60_000} />
+          <SlideThumb promo={promo} photos={photos} still={false} until={live ? liveUntil(promo, now) : lengthMs == null ? endOfNight() : Date.now() + lengthMs} />
         </div>
         {live ? (
           <>
@@ -105,29 +118,69 @@ export function ShowNowDialog({ promo, screens, photos, onClose, onSave }: {
               {promo.kind === 'video' && <span className="ml-1 inline-flex items-center gap-1 text-mute"><Film className="size-3.5" />The video loops.</span>}
             </p>
             <div className="grid grid-cols-3 gap-2">
-              {LENGTHS.map((l) => (
+              {[...LENGTHS.map((l) => ({ label: l.label, value: l.minutes as Length })), { label: 'Custom', value: 'custom' as Length }, { label: 'Rest of the night', value: 'night' as Length }].map((l) => (
                 <button
                   key={l.label}
                   type="button"
-                  aria-pressed={minutes === l.minutes}
-                  onClick={() => setMinutes(l.minutes)}
+                  aria-pressed={length === l.value}
+                  onClick={() => setLength(l.value)}
                   className={cn(
                     'h-12 rounded-xl border px-2 text-[13.5px] font-semibold transition-colors',
-                    l.minutes == null && 'col-span-3 h-11',
-                    minutes === l.minutes ? 'border-gold bg-gold text-purple-deep' : 'border-line bg-ink-900 text-white/80 hover:border-white/20',
+                    l.value === 'night' && 'col-span-3 h-11',
+                    length === l.value ? 'border-gold bg-gold text-purple-deep' : 'border-line bg-ink-900 text-white/80 hover:border-white/20',
                   )}
                 >
                   {l.label}
                 </button>
               ))}
             </div>
-            <Button variant="primary" size="lg" loading={busy} icon={<Radio className="size-4" />} onClick={() => go(untilFor(minutes))}>Show now</Button>
+            {length === 'custom' && (
+              <div className="grid gap-2 rounded-xl border border-line bg-white/[0.02] p-3.5">
+                <div className="flex items-center gap-2">
+                  <span className="mr-1 text-[13px] font-medium text-white/85">For</span>
+                  <TimePart label="Minutes" unit="min" value={mins} onChange={setMins} max={720} />
+                  <TimePart label="Seconds" unit="sec" value={secs} onChange={setSecs} max={59} />
+                </div>
+                <p className={cn('text-[12.5px]', typedProblem ? 'text-bad' : 'text-mute')}>
+                  {typedProblem ?? `Stays on the screens for ${spoken(typed)}.`}
+                </p>
+              </div>
+            )}
+            <Button variant="primary" size="lg" loading={busy} disabled={!!typedProblem} icon={<Radio className="size-4" />} onClick={() => go(untilFor(lengthMs))}>Show now</Button>
           </>
         )}
       </div>
     </Dialog>
   );
 }
+
+function TimePart({ label, unit, value, max, onChange }: { label: string; unit: string; value: string; max: number; onChange: (v: string) => void }) {
+  // Clicking in selects the whole number, so typing replaces it. The browser would undo
+  // a select() made on focus when the mouse comes up, so that first mouseup is skipped.
+  const fresh = useRef(false);
+  return (
+    <div className="relative">
+      <Input
+        aria-label={label}
+        type="text" inputMode="numeric" autoComplete="off" maxLength={String(max).length}
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))}
+        onFocus={(e) => { fresh.current = true; e.currentTarget.select(); }}
+        onMouseUp={(e) => { if (fresh.current) e.preventDefault(); fresh.current = false; }}
+        onBlur={() => { fresh.current = false; }}
+        className="h-11 w-[92px] pr-11 text-center text-[16px]"
+      />
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-mute">{unit}</span>
+    </div>
+  );
+}
+
+/** 150 → "2 minutes 30 seconds". */
+const spoken = (total: number) => {
+  const h = Math.floor(total / 3600), m = Math.floor(total / 60) % 60, s = total % 60;
+  const part = (n: number, w: string) => (n ? `${n} ${w}${n === 1 ? '' : 's'}` : '');
+  return [part(h, 'hour'), part(m, 'minute'), part(s, 'second')].filter(Boolean).join(' ') || '0 seconds';
+};
 
 /** The slides taking over the screens right now, with time left and a stop button. */
 export function LiveBar({ promos, onOpen, onStop }: { promos: Promo[]; onOpen: (p: Promo) => void; onStop: (p: Promo) => void }) {
