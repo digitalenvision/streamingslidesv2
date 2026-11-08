@@ -170,13 +170,17 @@ export function Empty({ icon, title, body, action }: { icon: ReactNode; title: s
 
 // --- dialog / bottom sheet ------------------------------------------------------
 export function Dialog({ open, onClose, title, children, footer, wide }: {
-  open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; wide?: boolean;
+  open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; wide?: boolean | 'xl';
 }) {
   const panel = useRef<HTMLDivElement>(null);
+  // Only opening and closing move the focus. Keyed on onClose too, a parent that re-renders
+  // (a ticking clock) sent the focus back to the first field every time, mid-typing.
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close.current();
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>('input, textarea, select, button:not([data-close])')?.focus());
@@ -185,7 +189,7 @@ export function Dialog({ open, onClose, title, children, footer, wide }: {
       document.body.style.overflow = '';
       prev?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
@@ -197,7 +201,7 @@ export function Dialog({ open, onClose, title, children, footer, wide }: {
         aria-label={title}
         className={cn(
           'relative flex max-h-[92dvh] w-full flex-col rounded-t-3xl border border-line bg-ink-850 shadow-pop animate-sheet-up sm:animate-fade-up sm:rounded-2xl',
-          wide ? 'sm:max-w-2xl' : 'sm:max-w-md',
+          wide === 'xl' ? 'sm:max-w-6xl' : wide ? 'sm:max-w-2xl' : 'sm:max-w-md',
         )}
       >
         <div className="flex items-center justify-between gap-4 px-5 pb-2 pt-4">

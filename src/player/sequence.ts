@@ -2,11 +2,23 @@
 // (or all photos shuffled), with each promo slide dropped in after every N photos.
 import { albumName, longDate } from '@/lib/format';
 import { photoUrl, publicUrl } from '@/lib/media';
-import type { Playlist } from '@/types';
+import type { Playlist, PlaylistSlide, SlideDesign } from '@/types';
 
 export type Slide =
   | { key: string; kind: 'photo'; src: string; thumb: string; backdrop: string; w: number; h: number; album: string; date: string | null; seconds: number }
-  | { key: string; kind: 'promo'; src: string; promoKind: 'image' | 'video'; title: string; seconds: number; w: number | null; h: number | null };
+  | { key: string; kind: 'promo'; src: string; promoKind: 'image' | 'video'; title: string; seconds: number; w: number | null; h: number | null }
+  | { key: string; kind: 'message'; design: SlideDesign; title: string; seconds: number };
+
+/** A promo, uploaded or designed, as the player shows it. */
+export function promoSlide(p: PlaylistSlide, key = `promo:${p.id}`): Slide {
+  return p.kind === 'message'
+    ? { key, kind: 'message', design: p.design!, title: p.title, seconds: p.duration_seconds }
+    : { key, kind: 'promo', src: publicUrl(p.path!), promoKind: p.kind, title: p.title, seconds: p.duration_seconds, w: p.w, h: p.h };
+}
+
+/** The newest album's small photos, for designed slides with the photo-wall background. */
+export const wallPhotos = (playlist: Playlist) =>
+  (playlist.albums[0]?.photos ?? []).slice(0, 42).map((p) => photoUrl(playlist.albums[0].id, p.id, 400, p.f));
 
 const shuffle = <T,>(list: T[]) => {
   const a = [...list];
@@ -75,9 +87,11 @@ export function buildSequence(playlist: Playlist, previous: Slide[] = [], lastPh
     ? keepOrder(photos, previous.flatMap((s) => (s.kind === 'photo' ? s.key : [])), lastPhoto, new Set(freshKeys(playlist)))
     : photos;
 
-  const promos = playlist.promos.map((p) => ({
-    slide: { key: `promo:${p.id}`, kind: 'promo' as const, src: publicUrl(p.path), promoKind: p.kind, title: p.title, seconds: p.duration_seconds, w: p.w, h: p.h },
-    every: p.every_n,
+  // A designed slide saved without its design (shouldn't happen) is left out rather than drawn blank.
+  const promos = playlist.promos.filter((p) => p.kind !== 'message' || p.design).map((p) => ({
+    slide: promoSlide(p),
+    // "Every 5 minutes" becomes a number of photos at this screen's pace.
+    every: p.every_minutes ? Math.max(1, Math.round((p.every_minutes * 60) / Math.max(1, Number(screen.photo_seconds)))) : p.every_n,
     count: 0,
   }));
 

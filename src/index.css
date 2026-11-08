@@ -50,9 +50,11 @@
   .label {
     @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-mute;
   }
+  /* Focused: the border turns gold with a soft glow, instead of the page-wide focus ring
+     (which drew a second outline around the border). */
   .field {
-    @apply h-11 w-full rounded-xl border border-line bg-ink-850 px-3.5 text-white placeholder:text-white/30 transition-colors
-      hover:border-white/15 focus:border-gold/60 focus:outline-none;
+    @apply h-11 w-full rounded-xl border border-line bg-ink-850 px-3.5 text-white placeholder:text-white/30 transition-[border-color,box-shadow]
+      hover:border-white/15 focus:border-gold/70 focus:outline-none focus:ring-[3px] focus:ring-gold/15 focus:ring-offset-0;
   }
   .skeleton {
     @apply animate-shimmer bg-[linear-gradient(90deg,rgb(255_255_255/0.04),rgb(255_255_255/0.09),rgb(255_255_255/0.04))] bg-[length:200%_100%];

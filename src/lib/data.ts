@@ -1,9 +1,9 @@
 // All reads and writes of the Gusto media tables. Row access is enforced by RLS
 // (staff only for writes), so these stay thin.
 import { supabase } from './supabase';
-import { GALLERY_BUCKET, CACHE_SECONDS, ORIGINALS_BUCKET } from './media';
+import { GALLERY_BUCKET, CACHE_SECONDS, ORIGINALS_BUCKET, photoUrl } from './media';
 import { removePhotoFiles } from './upload';
-import type { Album, EventSetting, Photo, Promo, RemovalRequest, Screen, UpcomingEvent, Visitor } from '@/types';
+import type { Album, EventSetting, Photo, Promo, RemovalRequest, Screen, SlideDesign, UpcomingEvent, Visitor } from '@/types';
 
 const ok = <T>({ data, error }: { data: T | null; error: { message: string } | null }): T => {
   if (error) throw new Error(error.message);
@@ -103,7 +103,9 @@ export async function downloadUrl(photo: Photo) {
 export const listPromos = async () =>
   ok(await supabase.from('promo_slides').select('*').order('position').order('created_at', { ascending: false })) as Promo[];
 
-export async function createPromo(file: File, input: Omit<Promo, 'id' | 'path' | 'kind' | 'width' | 'height' | 'created_at' | 'position'>) {
+type PromoFields = Omit<Promo, 'id' | 'path' | 'kind' | 'width' | 'height' | 'created_at' | 'position' | 'design' | 'live_until' | 'skip_until'>;
+
+export async function createPromo(file: File, input: PromoFields) {
   const id = crypto.randomUUID();
   const kind = file.type.startsWith('video/') ? 'video' : 'image';
   const ext = (file.name.split('.').pop() || (kind === 'video' ? 'mp4' : 'jpg')).toLowerCase();
@@ -114,12 +116,59 @@ export async function createPromo(file: File, input: Omit<Promo, 'id' | 'path' |
   return ok(await supabase.from('promo_slides').insert({ id, kind, path, ...size, ...input }).select().single()) as Promo;
 }
 
+/** A slide designed in Command. `id` comes from the editor, which may have uploaded pictures under it already. */
+export const createDesignedSlide = async (id: string, design: SlideDesign, input: PromoFields) =>
+  ok(await supabase.from('promo_slides').insert({ id, kind: 'message', path: null, width: 1920, height: 1080, design, ...input }).select().single()) as Promo;
+
+/**
+ * Stores a picture for a designed slide (background or product shot) and returns its path.
+ * Phone photos are shrunk to what a TV shows; WebP keeps a product shot's see-through parts.
+ */
+export async function uploadSlidePicture(promoId: string, file: File, role: 'bg' | 'item') {
+  const blob = await shrink(file, role === 'bg' ? 2400 : 1400);
+  const path = `promos/${promoId}/${role}-${Date.now()}.${blob.type === 'image/webp' ? 'webp' : (file.name.split('.').pop() || 'jpg').toLowerCase()}`;
+  const { error } = await supabase.storage.from(GALLERY_BUCKET).upload(path, blob, { cacheControl: CACHE_SECONDS, contentType: blob.type });
+  if (error) throw new Error(error.message);
+  return path;
+}
+
+async function shrink(file: File, edge: number): Promise<Blob> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/webp', 0.88));
+    return blob && blob.type === 'image/webp' ? blob : file;
+  } catch {
+    return file;
+  }
+}
+
+/** Every file a slide owns: an upload's file, a design's pictures. */
+export const slideFiles = (p: Pick<Promo, 'path' | 'design'>) =>
+  [p.path, p.design?.background.type === 'image' ? p.design.background.path : null, p.design?.image].filter((x): x is string => !!x);
+export const removeSlideFiles = async (paths: string[]) => {
+  if (paths.length) await supabase.storage.from(GALLERY_BUCKET).remove(paths);
+};
+
 export const updatePromo = async (id: string, patch: Partial<Promo>) =>
   ok(await supabase.from('promo_slides').update(patch).eq('id', id).select().single()) as Promo;
 
 export async function deletePromo(promo: Promo) {
-  await supabase.storage.from(GALLERY_BUCKET).remove([promo.path]);
+  await removeSlideFiles(slideFiles(promo));
   ok(await supabase.from('promo_slides').delete().eq('id', promo.id));
+}
+
+/** Small photos of the newest published album: the "Latest photos" background in the editor. */
+export async function latestWallPhotos() {
+  const { data: album } = await supabase.from('event_albums').select('id').eq('status', 'published').order('event_date', { ascending: false }).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (!album) return [];
+  const { data } = await supabase.from('event_photos').select('id,format').eq('album_id', album.id).eq('hidden_screen', false).order('position').limit(42);
+  return (data ?? []).map((p) => photoUrl(album.id, p.id, 400, p.format));
 }
 
 function mediaSize(file: File, kind: 'image' | 'video'): Promise<{ width: number | null; height: number | null }> {

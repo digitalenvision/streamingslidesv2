@@ -5,14 +5,15 @@
 // Why it's fast: it plays the 1920px versions (~250 KB instead of multi-MB camera
 // files), starts as soon as the first photo is decoded, keeps the next few photos
 // decoded in the background, and the service worker keeps played photos on the TV.
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { screenChannel, type Command, type PlayerStatus } from '@/lib/remote';
 import { publicUrl } from '@/lib/media';
 import { Logo, Mark } from '@/components/ui';
 import type { Playlist, Transition } from '@/types';
-import { buildSequence, firstArrival, locate, type Slide } from './sequence';
+import { buildSequence, firstArrival, locate, promoSlide, wallPhotos, type Slide } from './sequence';
+import { MessageSlide, designImages, loadSlideFonts } from './MessageSlide';
 
 const LegacyPreview = lazy(() => import('@/legacy/SlideshowPreview').then((m) => ({ default: m.SlideshowPreview })));
 
@@ -22,6 +23,7 @@ const REFRESH_DEBOUNCE = 2_000;
 const REFRESH_MAX_WAIT = 10_000;
 const POLL_MS = 5 * 60_000;
 const STATUS_MS = 10_000;
+const FADE_MS = 900;
 const playerId = (() => {
   try {
     return (localStorage.gustoPlayerId ??= crypto.randomUUID().slice(0, 8));
@@ -32,20 +34,33 @@ const playerId = (() => {
 
 // --- image preloading -------------------------------------------------------------
 const ready = new Map<string, Promise<boolean>>();
-function preload(slide: Slide): Promise<boolean> {
-  if (slide.kind === 'promo' && slide.promoKind === 'video') return Promise.resolve(true);
-  let p = ready.get(slide.src);
+function decode(src: string): Promise<boolean> {
+  let p = ready.get(src);
   if (!p) {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.src = slide.src;
+    img.src = src;
     // A failed load may be temporary, so the next pass asks again.
-    p = img.decode().then(() => true, () => { ready.delete(slide.src); return false; });
-    ready.set(slide.src, p);
+    p = img.decode().then(() => true, () => { ready.delete(src); return false; });
+    ready.set(src, p);
     if (ready.size > 40) ready.delete(ready.keys().next().value!);
   }
-  return Promise.race([p, new Promise<boolean>((r) => setTimeout(() => r(false), READY_TIMEOUT))]);
+  return p;
 }
+function preload(slide: Slide): Promise<boolean> {
+  if (slide.kind === 'promo' && slide.promoKind === 'video') return Promise.resolve(true);
+  // A designed slide waits for its fonts and pictures; a picture that won't load doesn't hold it back.
+  const p = slide.kind === 'message'
+    ? Promise.all([loadSlideFonts().catch(() => {}), ...designImages(slide.design).map(decode)]).then(() => true)
+    : decode(slide.src);
+  return Promise.race([p, new Promise<boolean>((r) => setTimeout(() => r(slide.kind === 'message'), READY_TIMEOUT))]);
+}
+
+// The TV's clock can be off, so "Show now" endings are worked out from the server's clock.
+let skew = 0;
+const serverTime = (iso: string) => Date.parse(iso) - skew;
+// What plays, without the parts that change on every call.
+const contentOf = (p: Playlist) => JSON.stringify({ ...p, now: undefined, refresh_in: undefined });
 
 // --- playlist ---------------------------------------------------------------------
 async function fetchPlaylist(id: string): Promise<Playlist | null | 'offline'> {
@@ -59,6 +74,7 @@ async function fetchPlaylist(id: string): Promise<Playlist | null | 'offline'> {
     }
   }
   if (data) try { localStorage.setItem(`gusto-playlist:${id}`, JSON.stringify(data)); } catch { /* storage full: fine */ }
+  if (data?.now) skew = data.now - Date.now();
   return data as Playlist | null;
 }
 
@@ -146,14 +162,26 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
 
   // Timer for the current slide (videos advance when they end).
   const top = layers.at(-1);
+  // "Show now": slides that take over the screen. The slideshow holds still underneath and
+  // carries on from the same photo when they end.
+  const [tick, setTick] = useState(0);
+  const live = useMemo(
+    () => (playlist.live ?? [])
+      .filter((p) => p.kind !== 'message' || p.design)
+      .map((p) => ({ slide: promoSlide(p, `live:${p.id}`), until: serverTime(p.live_until) }))
+      .filter((l) => l.until > Date.now()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [playlist, tick],
+  );
+  const taken = live.length > 0;
   useEffect(() => {
     const current = top?.slide;
-    if (!playing || !current || slides.length < 2) return;
+    if (!playing || taken || !current || slides.length < 2) return;
     if (current.kind === 'promo' && current.promoKind === 'video') return;
     const t = setTimeout(next, current.seconds * 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [top?.n, playing, next, slides.length]);
+  }, [top?.n, playing, taken, next, slides.length]);
 
   // Drop the layer underneath once the new one has finished coming in.
   useEffect(() => {
@@ -163,11 +191,16 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
   }, [layers, transitionSeconds]);
 
   // Playlist changes: Realtime on the screen row, plus a slow poll as a safety net.
-  const refresh = useCallback(async () => {
+  // The clock alone also changes what plays (a slide's hours, a new night, "Show now" ending):
+  // the server says when, and the player asks again right then.
+  const clockTimer = useRef<ReturnType<typeof setTimeout>>();
+  const refresh = useCallback(async (): Promise<void> => {
     const fresh = await fetchPlaylist(id);
     if (!fresh || fresh === 'offline') return;
+    clearTimeout(clockTimer.current);
+    if (fresh.refresh_in) clockTimer.current = setTimeout(() => refresh(), Math.min(fresh.refresh_in * 1000, POLL_MS * 12) + 1500);
     const { playlist: old, slides: list } = state.current;
-    if (JSON.stringify(old) === JSON.stringify(fresh)) return;
+    if (contentOf(old) === contentOf(fresh)) return;
     // Turning shuffle on or off starts a new order; anything else keeps the current one.
     const previous = old.screen.shuffle === fresh.screen.shuffle ? list : [];
     playNext.current = firstArrival(fresh, previous);
@@ -189,8 +222,15 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'screens', filter: `id=eq.${screen.id}` }, soon)
       .subscribe((s) => { if (s === 'SUBSCRIBED') soon(); });
     const poll = setInterval(refresh, POLL_MS);
-    return () => { clearTimeout(timer); clearInterval(poll); ch.unsubscribe(); };
+    return () => { clearTimeout(timer); clearTimeout(clockTimer.current); clearInterval(poll); ch.unsubscribe(); };
   }, [screen.id, refresh]);
+
+  // A "Show now" slide leaves the moment its time is up, even if the TV is offline.
+  useEffect(() => {
+    if (!live.length) return;
+    const t = setTimeout(() => { setTick((n) => n + 1); refresh(); }, Math.max(0, Math.min(...live.map((l) => l.until)) - Date.now()) + 50);
+    return () => clearTimeout(t);
+  }, [live, refresh]);
 
   // After a playlist change, carry on from the same slide if it's still there.
   const firstRun = useRef(true);
@@ -215,13 +255,16 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
 
   // Remote control and status heartbeat.
   const channel = useRef<ReturnType<typeof screenChannel> | null>(null);
+  const liveRef = useRef(live);
+  liveRef.current = live;
   const report = useCallback(() => {
     const { index: i, slides: list, playing: p, black: b } = state.current;
-    const s = list[i];
+    const takeover = liveRef.current[0]?.slide;
+    const s = takeover ?? list[i];
     const status: PlayerStatus = {
       player: playerId, playing: p, black: b, index: i, total: list.length,
       albums: playlist.albums.length, promos: playlist.promos.length, version: screen.content_version,
-      now: s ? (s.kind === 'photo' ? { kind: 'photo', album: s.album, src: s.thumb } : { kind: 'promo', title: s.title, src: s.promoKind === 'image' ? s.src : undefined }) : null,
+      now: s ? (s.kind === 'photo' ? { kind: 'photo', album: s.album, src: s.thumb } : { kind: 'promo', title: takeover ? `Show now · ${s.title}` : s.title, src: s.kind === 'promo' && s.promoKind === 'image' ? s.src : undefined }) : null,
       ua: navigator.userAgent, at: Date.now(),
     };
     channel.current?.send({ type: 'broadcast', event: 'status', payload: status });
@@ -245,7 +288,7 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
     const beat = setInterval(report, STATUS_MS);
     return () => { clearInterval(beat); ch.unsubscribe(); channel.current = null; };
   }, [screen.id, next, previous, report]);
-  useEffect(() => { report(); }, [index, playing, black, report]);
+  useEffect(() => { report(); }, [index, playing, black, live, report]);
 
   // Keyboard, idle cursor, keep the TV awake.
   const [cursor, setCursor] = useState(false);
@@ -279,7 +322,9 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
     navigator.serviceWorker?.register('/player-sw.js').catch(() => {});
   }, []);
 
-  if (!slides.length) return <Idle message="Tonight’s photos are on their way" />;
+  const wall = useMemo(() => wallPhotos(playlist), [playlist]);
+
+  if (!slides.length && !taken) return <Idle message="Tonight’s photos are on their way" />;
 
   return (
     <div
@@ -297,15 +342,20 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
             {slide.kind === 'photo' && !background && slide.h > slide.w * 0.8 && (
               <img src={slide.backdrop} crossOrigin="anonymous" alt="" className="absolute inset-0 size-full scale-110 object-cover opacity-60 blur-3xl" />
             )}
-            <div className="absolute flex items-center justify-center" style={{ inset: `${margin}%` }}>
-              {slide.kind === 'photo' ? (
-                <img src={slide.src} crossOrigin="anonymous" alt="" className="player-photo max-h-full max-w-full object-contain" style={{ width: slide.w, height: slide.h }} />
-              ) : slide.promoKind === 'video' ? (
-                <video src={slide.src} autoPlay muted playsInline className="size-full object-contain" onEnded={next} onError={next} />
-              ) : (
-                <img src={slide.src} alt="" className="max-h-full max-w-full object-contain" style={slide.w && slide.h ? { width: slide.w, height: slide.h } : undefined} />
-              )}
-            </div>
+            {slide.kind === 'message' ? (
+              // Designed slides fill the whole screen with their own background.
+              <MessageSlide design={slide.design} photos={wall} />
+            ) : (
+              <div className="absolute flex items-center justify-center" style={{ inset: `${margin}%` }}>
+                {slide.kind === 'photo' ? (
+                  <img src={slide.src} crossOrigin="anonymous" alt="" className="player-photo max-h-full max-w-full object-contain" style={{ width: slide.w, height: slide.h }} />
+                ) : slide.promoKind === 'video' ? (
+                  <video src={slide.src} autoPlay muted playsInline className="size-full object-contain" onEnded={next} onError={next} />
+                ) : (
+                  <img src={slide.src} alt="" className="max-h-full max-w-full object-contain" style={slide.w && slide.h ? { width: slide.w, height: slide.h } : undefined} />
+                )}
+              </div>
+            )}
             {slide.kind === 'photo' && screen.show_album_titles && (
               <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/70 to-transparent px-[3vw] pb-[2.6vw] pt-[8vw]">
                 <div className="grid gap-[.3vw]">
@@ -318,8 +368,45 @@ function Show({ id, initial }: { id: string; initial: Playlist }) {
           </div>
         ))}
       </div>
-      {!started && <Idle />}
+      {!started && slides.length > 0 && !taken && <Idle />}
+      <Takeover live={live} wall={wall} />
       <div className={`pointer-events-none absolute inset-0 z-10 bg-black transition-opacity duration-700 ${black ? 'opacity-100' : 'opacity-0'}`} />
+    </div>
+  );
+}
+
+// "Show now" slides over the slideshow: fades in, takes turns if there are several (a video
+// plays to its end, or loops when it's alone), and fades out when the time is up.
+function Takeover({ live, wall }: { live: { slide: Slide; until: number }[]; wall: string[] }) {
+  const [shown, setShown] = useState(live);
+  const [leaving, setLeaving] = useState(false);
+  const [turn, setTurn] = useState(0);
+  useEffect(() => {
+    if (live.length) { setShown(live); setLeaving(false); return; }
+    setLeaving(true);
+    const t = setTimeout(() => setShown([]), FADE_MS);
+    return () => clearTimeout(t);
+  }, [live]);
+  const item = shown.length ? shown[turn % shown.length] : null;
+  const advance = useCallback(() => setTurn((n) => n + 1), []);
+  useEffect(() => {
+    if (!item || shown.length < 2 || (item.slide.kind === 'promo' && item.slide.promoKind === 'video')) return;
+    const t = setTimeout(advance, item.slide.seconds * 1000);
+    return () => clearTimeout(t);
+  }, [item, shown.length, advance]);
+  if (!item) return null;
+  const { slide } = item;
+  return (
+    <div className="absolute inset-0 z-[5] bg-black transition-opacity ease-out" style={{ opacity: leaving ? 0 : 1, transitionDuration: `${FADE_MS}ms`, animation: `player-fade ${FADE_MS}ms ease-out both` }}>
+      <div key={`${slide.key}:${turn % shown.length}`} className="absolute inset-0" style={{ animation: 'player-fade .8s ease-in-out both' }}>
+        {slide.kind === 'message' ? (
+          <MessageSlide design={slide.design} photos={wall} liveUntil={item.until} />
+        ) : slide.kind === 'promo' && slide.promoKind === 'video' ? (
+          <video src={slide.src} autoPlay muted playsInline loop={shown.length < 2} className="size-full object-contain" onEnded={advance} onError={advance} />
+        ) : slide.kind === 'promo' ? (
+          <img src={slide.src} alt="" className="size-full object-contain" />
+        ) : null}
+      </div>
     </div>
   );
 }

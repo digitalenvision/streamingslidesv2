@@ -51,17 +51,57 @@ export interface EventSetting {
   no_happy_hour: boolean;
 }
 
+export type PromoKind = 'image' | 'video' | 'message';
+
+/** Layouts of a slide designed in Command (src/player/MessageSlide.tsx). */
+export type SlideLayout = 'headline' | 'celebrate' | 'spotlight' | 'alert';
+export type SlidePreset = 'velvet' | 'gold' | 'neon' | 'electric' | 'confetti' | 'spotlight';
+export type SlideAccent = 'gold' | 'white' | 'lime' | 'cyan' | 'magenta';
+export type SlideBackground =
+  | { type: 'preset'; id: SlidePreset }
+  /** The newest album's photos, drifting behind the words. */
+  | { type: 'photos' }
+  | { type: 'image'; path: string; dim: 'light' | 'medium' | 'strong' };
+
+export interface SlideDesign {
+  layout: SlideLayout;
+  kicker: string; // small line above the title
+  headline: string; // the big Akira title
+  body: string; // line under the title
+  footer: string; // bottom line; the price on a product slide
+  accent: SlideAccent;
+  background: SlideBackground;
+  image: string | null; // product shot (spotlight), a storage path
+  qr: { url: string; label: string } | null;
+  countdown: boolean; // alert: count down to the end of "Show now"
+}
+
 export interface Promo {
   id: string;
   title: string;
-  kind: 'image' | 'video';
-  path: string;
+  kind: PromoKind;
+  path: string | null; // null for designed slides
   width: number | null;
   height: number | null;
   duration_seconds: number;
   every_n: number;
   starts_on: string | null;
   ends_on: string | null;
+  /** Nights it plays, 0 = Sunday … 6 = Saturday; null = every night. */
+  days: number[] | null;
+  /** Hours within the night ('HH:MM:SS'); both null = all night. */
+  show_from: string | null;
+  show_until: string | null;
+  /** "Show now": takes over its screens until then. */
+  live_until: string | null;
+  /** How often in minutes, instead of every_n photos. */
+  every_minutes: number | null;
+  /** Times ('HH:MM:SS') it takes over its screens on its nights, for takeover_minutes. */
+  takeover_at: string[] | null;
+  takeover_minutes: number;
+  /** Stop pressed during a set-time takeover: takeovers ending by then are skipped. */
+  skip_until: string | null;
+  design: SlideDesign | null;
   active: boolean;
   position: number;
   screen_ids: string[] | null;
@@ -118,7 +158,18 @@ export interface RemovalRequest {
 export interface Playlist {
   screen: Omit<Screen, 'updated_at'>;
   albums: { id: string; title: string | null; event_date: string; fresh?: boolean; photos: { id: string; w: number; h: number; f: ImageFormat }[] }[];
-  promos: { id: string; title: string; kind: 'image' | 'video'; path: string; w: number | null; h: number | null; duration_seconds: number; every_n: number }[];
+  promos: PlaylistSlide[];
+  /** Slides taking over the screen right now ("Show now"). Older databases leave it out. */
+  live?: (PlaylistSlide & { live_until: string })[];
+  /** The server's clock (ms), for TVs whose own clock is off. */
+  now?: number;
+  /** Seconds until the clock alone changes what plays. */
+  refresh_in?: number | null;
+}
+
+export interface PlaylistSlide {
+  id: string; title: string; kind: PromoKind; path: string | null; w: number | null; h: number | null;
+  duration_seconds: number; every_n: number; every_minutes?: number | null; design?: SlideDesign | null;
 }
 
 // --- Gusto Command: admins and staff schedules (supabase/migrations/*_gusto_command.sql) ---

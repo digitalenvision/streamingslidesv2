@@ -30,6 +30,15 @@ TV player /preview/:id ──screen_playlist()┘   (Realtime: refreshes when co
 
 Schema, access rules and storage buckets: `supabase/migrations/20261027120000_gusto_media.sql`. The old tables (`slideshows`, `streams`, `stream_items`, `albums`, `photos`) are left untouched.
 
+### Promo slides
+
+Media → Promo slides holds uploaded flyers and videos, and slides designed in Command.
+
+- **Design a slide**: four layouts (Headline, Celebrate, Product, Alert), words, an accent colour, a background (six animated brand backgrounds, the newest album's photos drifting past, or an uploaded picture), an optional QR code and, on Alert, a countdown. Starting points: Tonight's photos, Happy birthday, Product, Closing soon. Titles are set in Akira and sized to fill the screen; a title with letters Akira lacks (É, Ñ, emoji) switches to wide Archivo as a whole. The TV draws the slide itself (`src/player/MessageSlide.tsx`) on a 1920×1080 stage scaled to the screen, so the editor preview is exactly what the TVs show.
+- **When it plays** (any slide): the nights of the week and first/last night; **between the photos** with hours (say 10 PM to 2 AM), how often (every N photos or every N minutes) and how long on screen; **at set times**, taking over the screens (say 2:50 AM for 10 minutes); and **Show now** from the slide's card, for 5 minutes up to the rest of the night. A club night runs 6 AM to 6 AM, so 1 AM Saturday counts as Friday night. During a takeover the photos hold still and carry on from the same photo afterwards; Stop ends it (a set-time one is skipped for that night).
+- The database decides what plays (`screen_playlist()`), and also tells each TV when the clock next changes that, so hours and set times start on time without waiting for the 5-minute poll. Countdowns use the server's clock, not the TV's.
+- **Font licence**: `src/assets/fonts/akira-expanded.woff2` is the same free demo as the website's ("personal use only"). Replace both with the licensed webfont.
+
 ## TV address
 
 The TVs open `stream.gustoaruba.com/preview/<id>`. That address keeps working:
@@ -79,6 +88,7 @@ Local test owner (from `supabase/seed.sql`): `admin@gusto.test`. 2FA is set up a
 6. **Website**: set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` and `GALLERY_COOKIE_SECRET` on the gustoaruba.com project.
 7. **Removal requests**: `20261028090000_removal_requests.sql` (in the same `db push`) and the updated website (`gusto-web`: `src/lib/gallery.ts`, `src/pages/api/gallery/*`, `src/pages/gallery/[slug].astro`) go live together. Only visitors who unlocked the gallery can ask, always with a reason; requests land under Media → Removal requests, and approving deletes the photo from the album, the website and the screens. The album page is CDN-cached for up to 5 minutes, so a removed photo can linger there that long (its tile drops out once the image is gone).
 8. **Screen look**: `20261101120000_screen_look.sql` adds a screen's background image, space around the photos and fade length (Screens → pick a screen). Apply it before deploying the player that reads them.
+   **Slide schedules and designed slides**: `20261108120000_slide_schedule_messages.sql` (nights, hours, minutes, set times, Show now, designed slides). Apply it before deploying this Command version; the TVs pick up the new player when reloaded from Command.
 9. Once everything is checked, ImageKit and the old `imagekit-auth` / `imagekit-delete` edge functions can be retired.
 
 ## Moving photos off ImageKit

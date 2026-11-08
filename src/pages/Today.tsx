@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { displayName, useAuth } from '@/lib/auth';
 import { can } from '@/lib/access';
 import { useLoad } from '@/lib/useLoad';
+import { slideState } from '@/lib/slides';
 import { useRemote } from '@/lib/useRemote';
 import { useWeek } from '@/lib/useWeek';
 import { Chip } from './staff/Schedule';
@@ -237,10 +238,9 @@ function MediaToday() {
       listRemovalRequests(),
       supabase.from('gallery_visitors').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo),
     ]);
-    const today = arubaToday();
     return {
       ...albums,
-      livePromos: promos.filter((p) => p.active && (!p.starts_on || p.starts_on <= today) && (!p.ends_on || p.ends_on >= today)).length,
+      livePromos: promos.filter((p) => ['on', 'live'].includes(slideState(p).state)).length,
       // Photos waiting for a decision (several requests for one photo count once), like the sidebar.
       openRequests: new Set(requests.filter((r) => r.status === 'open').map((r) => r.photo_id ?? r.id)).size,
       newEmails: emails.count ?? 0,

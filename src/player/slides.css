@@ -1,0 +1,136 @@
+/* Designed slides (MessageSlide.tsx). Laid out on a fixed 1920×1080 stage and scaled to
+   the screen, so the TV, the editor preview and the thumbnails all show the same thing.
+   Everything that moves animates transform/opacity only, which the club PC's GPU handles. */
+
+/* Akira Expanded, the website's title face. LICENCE: this is the same free demo file as
+   gusto-web/public/fonts ("personal use only"); swap in the licensed webfont with it. It has
+   no accented letters, so titles with any fall back to wide Archivo as a whole. */
+@font-face {
+  font-family: 'Akira Expanded';
+  src: url('../assets/fonts/akira-expanded.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: block;
+}
+/* Archivo with its width axis, for the wide lines (the website's Termina stand-in). Its own
+   family name so it can't change the admin's Archivo. */
+@font-face {
+  font-family: 'Gusto Wide';
+  src: url('../../node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: block;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Gusto Wide';
+  src: url('../../node_modules/@fontsource-variable/archivo/files/archivo-latin-ext-wdth-normal.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: block;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+.ms {
+  --accent: #e4b11a;
+  --accent-deep: #b8890b;
+  --accent-glow: 228 177 26;
+  font-family: 'Gusto Wide', 'Archivo Variable', system-ui, sans-serif;
+  color: #fff;
+  -webkit-font-smoothing: antialiased;
+}
+.ms-akira {
+  font-family: 'Akira Expanded', 'Gusto Wide', sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  line-height: 0.94;
+  letter-spacing: 0.01em;
+}
+/* A title Akira can't spell in full (accents, emoji): wide Archivo, black weight. */
+.ms-akira[data-fallback] {
+  font-family: 'Gusto Wide', sans-serif;
+  font-stretch: 125%;
+  font-weight: 900;
+  line-height: 0.98;
+}
+.ms-wide { font-stretch: 125%; }
+.ms-mid { font-stretch: 112%; }
+.ms-title { overflow: hidden; overflow-wrap: normal; word-break: keep-all; text-wrap: balance; }
+
+/* Gold (or the chosen colour) poured into the letters. */
+.ms-pour {
+  background: linear-gradient(180deg, #fff6d6 0%, var(--accent) 48%, var(--accent-deep) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 48px rgb(var(--accent-glow) / 0.35));
+}
+
+/* Entrance: each line rises in after the one above. */
+.ms-in { animation: ms-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes ms-in { from { opacity: 0; transform: translateY(36px); } }
+
+/* Film grain and vignette over everything, so big gradients don't band on TVs. */
+.ms-grain {
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.09;
+  mix-blend-mode: overlay;
+}
+.ms-vignette { pointer-events: none; background: radial-gradient(ellipse at center, transparent 50%, rgb(0 0 0 / 0.6) 100%); }
+
+/* --- backgrounds --------------------------------------------------------------------- */
+.ms-blob { position: absolute; border-radius: 9999px; will-change: transform; }
+.ms-drift-a { animation: ms-drift-a 26s ease-in-out infinite alternate; }
+.ms-drift-b { animation: ms-drift-b 32s ease-in-out infinite alternate; }
+.ms-drift-c { animation: ms-drift-c 21s ease-in-out infinite alternate; }
+@keyframes ms-drift-a { to { transform: translate3d(320px, -140px, 0) scale(1.15); } }
+@keyframes ms-drift-b { to { transform: translate3d(-380px, 180px, 0) scale(0.9); } }
+@keyframes ms-drift-c { to { transform: translate3d(200px, 220px, 0) scale(1.2); } }
+
+.ms-beam { position: absolute; top: -600px; width: 240px; height: 2400px; will-change: transform;
+  background: linear-gradient(90deg, transparent, rgb(243 207 95 / 0.13), transparent);
+  animation: ms-sweep 16s ease-in-out infinite alternate; }
+@keyframes ms-sweep { from { transform: translateX(-260px) rotate(24deg); } to { transform: translateX(260px) rotate(30deg); } }
+
+.ms-dust { position: absolute; border-radius: 9999px; background: #f3cf5f; box-shadow: 0 0 12px 2px rgb(243 207 95 / 0.6);
+  animation: ms-twinkle 4s ease-in-out infinite; }
+@keyframes ms-twinkle { 0%, 100% { opacity: 0.1; transform: scale(0.6); } 50% { opacity: 0.9; transform: scale(1); } }
+
+.ms-confetti { position: absolute; top: -60px; will-change: transform; animation: ms-fall linear infinite; }
+@keyframes ms-fall {
+  from { transform: translate3d(0, 0, 0) rotate(0deg) rotateY(0deg); }
+  to { transform: translate3d(var(--drift), 1240px, 0) rotate(var(--spin)) rotateY(900deg); }
+}
+
+.ms-cone { position: absolute; left: 50%; top: -160px; width: 1500px; height: 1400px; margin-left: -750px; transform-origin: 50% 0;
+  background: radial-gradient(ellipse 34% 78% at 50% 0%, rgb(255 238 205 / 0.24), rgb(255 238 205 / 0.06) 55%, transparent 75%);
+  animation: ms-sway 9s ease-in-out infinite alternate; will-change: transform; }
+@keyframes ms-sway { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
+
+.ms-streak { position: absolute; height: 3px; width: 900px; border-radius: 3px; will-change: transform;
+  background: linear-gradient(90deg, transparent, rgb(131 245 12 / 0.7), transparent);
+  animation: ms-streak 7s linear infinite; }
+@keyframes ms-streak { from { transform: translateX(-1100px) rotate(-18deg); } to { transform: translateX(2300px) rotate(-18deg); } }
+
+/* The photo wall: columns drifting up and down past each other. */
+.ms-col { display: flex; flex-direction: column; gap: 22px; will-change: transform; animation: ms-up 90s linear infinite; }
+.ms-col[data-down] { animation-name: ms-down; }
+@keyframes ms-up { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+@keyframes ms-down { from { transform: translateY(-50%); } to { transform: translateY(0); } }
+
+/* --- details ------------------------------------------------------------------------- */
+.ms-float { animation: ms-float 6s ease-in-out infinite alternate; will-change: transform; }
+@keyframes ms-float { from { transform: translateY(14px); } to { transform: translateY(-14px); } }
+.ms-pulse { animation: ms-pulse 1.8s ease-in-out infinite; }
+@keyframes ms-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.ms-spin-slow { animation: ms-spin 40s linear infinite; }
+@keyframes ms-spin { to { transform: rotate(360deg); } }
+
+/* Thumbnails hold still (a page of moving cards is a lot for a phone). */
+.ms-still .ms-in { animation: none; }
+.ms-still * { animation-play-state: paused !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ms * { animation-play-state: paused !important; }
+  .ms .ms-in { animation: none; }
+}
